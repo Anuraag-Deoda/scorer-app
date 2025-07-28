@@ -1,8 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react";
-import type { Match, BallEvent, Team, BallDetails, GenerateMatchCommentaryInput } from "@/types"
-import { processBall, undoLastBall } from "@/lib/cricket-logic"
+import type { Match, BallEvent, Team, BallDetails, GenerateMatchCommentaryInput, FielderPlacement } from "@/types"
+import { processBall, undoLastBall, updateFieldPlacements } from "@/lib/cricket-logic"
 import { simulateOver } from "@/ai/flows/simulate-over";
 import { generateMatchCommentary } from "@/ai/flows/generate-match-commentary";
 import { Button } from "@/components/ui/button"
@@ -15,6 +15,9 @@ import { useToast } from "@/hooks/use-toast"
 import { Undo, Flame, PlusCircle, Users, Bot, ChevronsRight, Target } from "lucide-react"
 import ManagePlayersDialog from "./manage-players-dialog";
 import { Label } from "./ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "./ui/dialog";
+import FieldEditor from "./field-editor"; // Assuming you'll create this component
+
 
 type ScoringInterfaceProps = {
   match: Match
@@ -32,7 +35,8 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
   const [isSimulating, setIsSimulating] = useState(false);
   const [commentary, setCommentary] = useState<string[]>([]);
   const [wicketTaker, setWicketTaker] = useState<{type: string, fielderId: number | null}>({type: '', fielderId: null});
-  
+  const [isFieldEditorOpen, setIsFieldEditorOpen] = useState(false);
+
   const currentInnings = match.innings[match.currentInnings - 1]
   const battingTeam = currentInnings.battingTeam
   const bowlingTeam = currentInnings.bowlingTeam
@@ -98,6 +102,23 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
     const nonStrike = innings.battingTeam.players.find(p => p.id === innings.batsmanNonStrike);
     const bowler = innings.bowlingTeam.players.find(p => p.id === innings.currentBowler);
     
+    // Include previous over data if available
+    const prevInnings = matchState.innings[matchState.currentInnings - 1];
+    const lastOver = prevInnings.overs > 0 
+        ? prevInnings.timeline.filter(ball => Math.floor(ball.over ?? 0) === prevInnings.overs -1)
+        : [];
+    const prevOverSummary = lastOver.length > 0 
+        ? `
+Previous over (${prevInnings.overs}): ${lastOver.map(ball => ball.display).join(', ')}`
+        : '';
+
+     // Include field placements if available
+     const fieldPlacementSummary = innings.fieldPlacements && innings.fieldPlacements.length > 0 
+        ? `
+Field placements: ${innings.fieldPlacements.map(fp => `${bowlingTeam.players.find(p => p.id === fp.playerId)?.name || 'Unknown'}: ${fp.position}`).join(', ')}`
+        : '';
+
+    
     return `
       Match: ${innings.battingTeam.name} vs ${innings.bowlingTeam.name}.
       Innings: ${matchState.currentInnings}.
@@ -107,6 +128,8 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
       Non-striker: ${nonStrike?.name} (${nonStrike?.batting.runs} runs).
       Bowler: ${bowler?.name}.
       Last ball: ${innings.timeline.length > 0 ? innings.timeline[innings.timeline.length - 1].display : 'N/A'}.
+      ${prevOverSummary}
+      ${fieldPlacementSummary}
     `;
   }
   
@@ -166,7 +189,9 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
 
                 if (matchState.status !== 'finished' && isStillInSameInnings) {
                     const updatedInnings = matchState.innings[matchState.currentInnings - 1];
-                    const ballNum = `${updatedInnings.overs}.${updatedInnings.ballsThisOver}`;
+                     // Ensure ball number is correct even with extras before legal delivery
+                    const ballsInOver = updatedInnings.timeline.filter(b => Math.floor(b.over ?? 0) === updatedInnings.overs).length;
+                    const ballNum = `${updatedInnings.overs}.${ballsInOver}`;
                     await handleGenerateCommentary(matchState, ballNum);
                 }
             }
@@ -221,7 +246,7 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
                     onChange={(e) => setWicketTaker({ ...wicketTaker, fielderId: parseInt(e.target.value) })}
                     className="w-full h-10 border rounded-md px-2 text-sm bg-background"
                 >
-                    <option>Select Fielder</option>
+                    <option value="">Select Fielder</option>
                     {bowlingTeam.players.filter(p => !p.isSubstitute).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
                 <AlertDialogFooter>
@@ -241,38 +266,67 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
     </AlertDialogContent>
   );
 
+    // Function to handle saving placements from FieldEditor
+    const handleSaveFieldPlacements = (placements: FielderPlacement[]) => {
+        const newMatchState = updateFieldPlacements(match, placements);
+        setMatch(newMatchState);
+        setIsFieldEditorOpen(false); // Close the dialog
+        toast({title: "Field Placements Updated", description: "Field settings for the current over have been saved."});
+    };
+
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div className="lg:col-span-1 space-y-6">
-        <Card className="shadow-lg">
-          <CardHeader className="pb-4">
-            <CardTitle className="font-headline text-center text-xl">Scoring Controls</CardTitle>
+        <Card className="shadow-none border-0 bg-muted/40">
+          <CardHeader className="pb-3">
+            <CardTitle className="font-sans text-lg font-semibold text-center">Scoring Controls</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-4 gap-2">
-              {[0, 1, 2, 3, 4, 6].map(runs => (
-                <Button key={runs} onClick={() => handleEvent('run', runs)} className="h-16 text-2xl font-bold" variant={runs === 4 ? 'primary' : runs === 6 ? 'default' : 'secondary'} disabled={scoringControlsDisabled}>
+              {[0, 1, 2, 3].map(runs => (
+                <Button key={runs} onClick={() => handleEvent('run', runs)} className="h-14 text-xl font-bold" variant="secondary" disabled={scoringControlsDisabled}>
+                  {runs}
+                </Button>
+              ))}
+              {[4, 6].map(runs => (
+                <Button key={runs} onClick={() => handleEvent('run', runs)} className="h-14 text-xl font-bold col-span-2" variant={runs === 4 ? 'default' : 'default'} disabled={scoringControlsDisabled}>
                   {runs}
                 </Button>
               ))}
                <AlertDialog onOpenChange={(isOpen) => !isOpen && setWicketTaker({ type: '', fielderId: null })}>
                   <AlertDialogTrigger asChild>
-                    <Button variant="destructive" className="h-16 col-span-2 text-lg" disabled={scoringControlsDisabled}>Wicket</Button>
+                    <Button variant="destructive" className="h-14 col-span-full text-lg" disabled={scoringControlsDisabled}>Wicket</Button>
                   </AlertDialogTrigger>
                   {renderWicketDialog()}
                 </AlertDialog>
             </div>
             <div className="grid grid-cols-4 gap-2">
-              <Button onClick={() => handleEvent('wd', 0, 1)} className="h-12 col-span-2" variant="outline" disabled={scoringControlsDisabled}>Wide</Button>
-              <Button onClick={() => handleEvent('nb', 0, 1)} className="h-12 col-span-2" variant="outline" disabled={scoringControlsDisabled}>No Ball</Button>
-              <Button onClick={() => handleEvent('lb', 0, 1)} className="h-12 col-span-2" variant="outline" disabled={scoringControlsDisabled}>Leg Bye</Button>
-              <Button onClick={() => handleEvent('b', 0, 1)} className="h-12 col-span-2" variant="outline" disabled={scoringControlsDisabled}>Bye</Button>
+              <Button onClick={() => handleEvent('wd', 0, 1)} className="h-10 col-span-2 text-sm" variant="outline" disabled={scoringControlsDisabled}>Wide</Button>
+              <Button onClick={() => handleEvent('nb', 0, 1)} className="h-10 col-span-2 text-sm" variant="outline" disabled={scoringControlsDisabled}>No Ball</Button>
+              <Button onClick={() => handleEvent('lb', 0, 1)} className="h-10 col-span-2 text-sm" variant="outline" disabled={scoringControlsDisabled}>Leg Bye</Button>
+              <Button onClick={() => handleEvent('b', 0, 1)} className="h-10 col-span-2 text-sm" variant="outline" disabled={scoringControlsDisabled}>Bye</Button>
             </div>
-             <Separator />
+             <Separator className="my-4"/>
               <Button onClick={handleSimulateOver} disabled={!canSimulate || isSimulating} className="w-full" size="lg">
                 <Bot className={`mr-2 h-5 w-5 ${isSimulating ? 'animate-spin' : ''}`} />
                 {isSimulating ? "Simulating..." : "Simulate Over"}
               </Button>
+               <Dialog open={isFieldEditorOpen} onOpenChange={setIsFieldEditorOpen}>
+                  <DialogTrigger asChild>
+                      <Button variant="outline" className="w-full" disabled={isSimulating}><Target className="mr-2"/> Field Editor</Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-[800px]">
+                      <DialogHeader>
+                          <DialogTitle>Field Placement Editor</DialogTitle>
+                      </DialogHeader>
+                       {/* Field Editor Component goes here */}
+                       {/* Pass the handleSaveFieldPlacements function to FieldEditor */}
+                       <FieldEditor match={match} setMatch={setMatch} onSave={handleSaveFieldPlacements}/>
+                       {/* Remove DialogFooter from here as it's now in FieldEditor */}
+                  </DialogContent>
+              </Dialog>
+
              <div className="flex gap-3">
                 <Button onClick={handleUndo} className="w-full" variant="ghost" disabled={isSimulating}><Undo className="mr-2"/> Undo</Button>
                 <AlertDialog>
@@ -302,52 +356,52 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
       </div>
 
       <div className="lg:col-span-2 space-y-6">
-        <Card className="text-center shadow-lg bg-card/70">
-          <CardHeader className="pb-4 pt-4">
-              <CardTitle className="font-headline text-2xl">{battingTeam.name} vs {bowlingTeam.name}</CardTitle>
+        <Card className="text-center shadow-none border-0 bg-muted/40">
+          <CardHeader className="pb-3 pt-3">
+              <CardTitle className="font-sans text-xl font-semibold">{battingTeam.name} vs {bowlingTeam.name}</CardTitle>
               <CardDescription>{match.oversPerInnings} Over Match</CardDescription>
               {match.status === 'finished' && <p className="text-lg font-bold text-primary mt-2">{match.result}</p>}
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 space-y-4">
             <div className="flex justify-around items-center">
               <div className="text-left">
-                <p className="text-lg font-semibold">{battingTeam.name}</p>
-                <p className="font-bold text-5xl font-headline flex items-end">
+                <p className="text-lg font-semibold text-muted-foreground">{battingTeam.name}</p>
+                <p className="font-bold text-6xl font-sans flex items-end">
                   <span>{currentInnings.score}</span>
-                  <span className="text-3xl font-normal text-destructive/80">-{currentInnings.wickets}</span>
+                  <span className="text-4xl font-normal text-destructive/80">-{currentInnings.wickets}</span>
                 </p>
-                <p className="font-mono text-muted-foreground">({currentInnings.overs}.{currentInnings.ballsThisOver} Ovr)</p>
+                <p className="font-mono text-muted-foreground text-sm">({currentInnings.overs}.{currentInnings.ballsThisOver} Ovr)</p>
               </div>
               {match.currentInnings > 1 && (
                   <>
                     <ChevronsRight className="w-8 h-8 text-muted-foreground" />
                     <div className="text-left">
                         <div className="flex items-center gap-2">
-                          <Target className="w-6 h-6 text-primary"/>
-                          <p className="text-lg font-semibold">Target</p>
+                          <Target className="w-5 h-5 text-primary"/>
+                          <p className="text-base font-semibold text-muted-foreground">Target</p>
                         </div>
-                        <p className="font-bold text-5xl font-headline text-primary">{match.innings[0].score + 1}</p>
+                        <p className="font-bold text-5xl font-sans text-primary">{match.innings[0].score + 1}</p>
                     </div>
                   </>
               )}
             </div>
             <Separator className="my-4"/>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 text-left text-sm">
-                <div className="bg-muted/50 p-2 rounded-md">
-                    <p className="font-bold truncate">{onStrikeBatsman?.name}*</p>
-                    <p className="text-muted-foreground">{onStrikeBatsman?.batting.runs} ({onStrikeBatsman?.batting.ballsFaced})</p>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-left text-sm">
+                <div className="bg-card p-3 rounded-md">
+                    <p className="font-semibold truncate text-primary">{onStrikeBatsman?.name}{onStrikeBatsman?.id === currentInnings.batsmanOnStrike ? '*' : ''}</p>
+                    <p className="text-muted-foreground text-xs">{onStrikeBatsman?.batting.runs} ({onStrikeBatsman?.batting.ballsFaced})</p>
                 </div>
-                <div className="bg-muted/50 p-2 rounded-md">
-                     <p className="font-bold truncate">{nonStrikeBatsman?.name}</p>
-                     <p className="text-muted-foreground">{nonStrikeBatsman?.batting.runs} ({nonStrikeBatsman?.batting.ballsFaced})</p>
+                <div className="bg-card p-3 rounded-md">
+                     <p className="font-semibold truncate">{nonStrikeBatsman?.name}</p>
+                     <p className="text-muted-foreground text-xs">{nonStrikeBatsman?.batting.runs} ({nonStrikeBatsman?.batting.ballsFaced})</p>
                 </div>
-                 <div className="bg-muted/50 p-2 rounded-md">
-                    <p className="font-bold truncate">{currentBowler?.name || 'N/A'}</p>
-                     {currentBowler ? <p className="text-muted-foreground">{currentBowler?.bowling.wickets}/{currentBowler?.bowling.runsConceded} ({Math.floor(currentBowler?.bowling.ballsBowled/6)}.{currentBowler?.bowling.ballsBowled % 6})</p> : <p className="text-muted-foreground">Overs: {currentInnings.overs}</p>}
+                 <div className="bg-card p-3 rounded-md">
+                    <p className="font-semibold truncate text-primary">{currentBowler?.name || 'N/A'}</p>
+                     {currentBowler ? <p className="text-muted-foreground text-xs">{currentBowler?.bowling.wickets}/{currentBowler?.bowling.runsConceded} ({Math.floor(currentBowler?.bowling.ballsBowled/6)}.{currentBowler?.bowling.ballsBowled % 6})</p> : <p className="text-muted-foreground text-xs">Overs: {currentInnings.overs}</p>}
                 </div>
-                 <div className="bg-muted/50 p-2 rounded-md">
-                    <p className="font-bold">Partnership</p>
-                    <p className="text-muted-foreground">{currentInnings.currentPartnership.runs} ({currentInnings.currentPartnership.balls})</p>
+                 <div className="bg-card p-3 rounded-md">
+                    <p className="font-semibold">Partnership</p>
+                    <p className="text-muted-foreground text-xs">{currentInnings.currentPartnership.runs} ({currentInnings.currentPartnership.balls})</p>
                 </div>
             </div>
              {match.status === 'finished' && (

@@ -24,25 +24,25 @@ export default function CommentaryGenerator({ match, commentary, setCommentary, 
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="font-headline text-center text-xl flex items-center justify-center gap-2">
-            <Bot /> AI Commentary
+    <Card className="shadow-none border-0">
+      <CardHeader className="pb-2">
+        <CardTitle className="font-sans text-lg font-semibold text-center flex items-center justify-center gap-2">
+            <Bot className="w-5 h-5 text-muted-foreground" /> AI Commentary
         </CardTitle>
-        <CardDescription className="text-center">Live insights powered by AI</CardDescription>
+        <CardDescription className="text-center text-sm text-muted-foreground">Live insights powered by AI</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <Button onClick={handleGenerateCommentary} disabled={isLoading} className="w-full">
-          <Sparkles className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+      <CardContent className="space-y-3 p-3 pt-0">
+        <Button onClick={handleGenerateCommentary} disabled={isLoading} className="w-full text-sm py-2 h-auto">
+          <Sparkles className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin text-primary/80' : ''}`} />
           {isLoading ? "Generating..." : "Generate Commentary"}
         </Button>
-        <ScrollArea className="h-48 w-full rounded-md border p-4 bg-secondary/30">
+        <ScrollArea className="h-40 w-full rounded-md border p-3 text-sm bg-gray-50 dark:bg-gray-900">
             {commentary.length === 0 ? (
-                <p className="text-sm text-center text-muted-foreground pt-12">Click the button to generate the first commentary line!</p>
+                <p className="text-xs text-center text-muted-foreground pt-8">Click the button to generate the first commentary line!</p>
             ) : (
-                <div className="space-y-4">
+                <div className="space-y-3">
                     {commentary.map((line, index) => (
-                        <p key={index} className="text-sm">
+                        <p key={index} className="text-sm leading-relaxed">
                             {line}
                         </p>
                     ))}

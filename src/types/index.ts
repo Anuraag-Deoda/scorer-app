@@ -31,6 +31,12 @@ export interface Team {
   impactPlayerUsed?: boolean;
 }
 
+// New interface for Fielder Placement
+export interface FielderPlacement {
+  playerId: number;
+  position: string; // Consider using a more specific type or enum for positions later
+}
+
 export interface Ball {
   event: BallEvent;
   runs: number;
@@ -67,6 +73,7 @@ export interface Innings {
   batsmanOnStrike: number;
   batsmanNonStrike: number;
   currentBowler: number;
+  fieldPlacements?: FielderPlacement[]; // Added field placements to Innings
 }
 
 export interface Match {

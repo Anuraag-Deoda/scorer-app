@@ -29,13 +29,14 @@ export default function Scoreboard({ match, setMatch, onBowlerChange, isSimulati
       const didNotBat = innings.battingTeam.players.filter((p:Player) => p.batting.status === 'did not bat' && !p.isSubstitute);
       
       return (
-        <div className="bg-card">
+        <div className="bg-card/50 rounded-md p-2">
+            <h4 className="text-base font-semibold mb-2">Batting</h4>
             <Table>
               <TableHeader>
-                <TableRow className="border-b-white/10">
-                  <TableHead className="w-[35%] font-bold">Batter</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right font-bold">R</TableHead>
+                <TableRow className="border-b-muted/50">
+                  <TableHead className="w-[35%] font-semibold">Batter</TableHead>
+                  <TableHead className="text-left">Status</TableHead>
+                  <TableHead className="text-right font-semibold">R</TableHead>
                   <TableHead className="text-right">B</TableHead>
                   <TableHead className="text-right">4s</TableHead>
                   <TableHead className="text-right">6s</TableHead>
@@ -48,26 +49,26 @@ export default function Scoreboard({ match, setMatch, onBowlerChange, isSimulati
                   const isOnStrike = player.id === currentInnings.batsmanOnStrike && isNotOut;
 
                   return (
-                  <TableRow key={player.id} className={`border-0 ${isNotOut ? 'bg-primary/10' : ''}`}>
-                    <TableCell className="font-semibold">
-                      {player.name}{isOnStrike ? '*' : ''}{player.isImpactPlayer ? <Badge variant="outline" className="ml-2">IP</Badge> : ''}
+                  <TableRow key={player.id} className={`border-0 text-sm ${isNotOut ? 'bg-primary/5' : ''}`}>
+                    <TableCell className="font-medium py-1">
+                      {player.name}{isOnStrike ? '*' : ''}{player.isImpactPlayer ? <Badge variant="outline" className="ml-1 text-xs px-1 py-0.5 font-normal">IP</Badge> : ''}
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground max-w-[120px] truncate">
+                    <TableCell className="text-xs text-muted-foreground max-w-[120px] truncate py-1">
                         {player.batting.status === 'out' ? player.batting.outDetails : player.batting.status}
                     </TableCell>
-                    <TableCell className="text-right font-bold">{player.batting.runs}</TableCell>
-                    <TableCell className="text-right">{player.batting.ballsFaced}</TableCell>
-                    <TableCell className="text-right">{player.batting.fours}</TableCell>
-                    <TableCell className="text-right">{player.batting.sixes}</TableCell>
-                    <TableCell className="text-right">{player.batting.strikeRate.toFixed(1)}</TableCell>
+                    <TableCell className="text-right py-1 font-medium">{player.batting.runs}</TableCell>
+                    <TableCell className="text-right py-1">{player.batting.ballsFaced}</TableCell>
+                    <TableCell className="text-right py-1">{player.batting.fours}</TableCell>
+                    <TableCell className="text-right py-1">{player.batting.sixes}</TableCell>
+                    <TableCell className="text-right py-1">{player.batting.strikeRate.toFixed(1)}</TableCell>
                   </TableRow>
                 )})}
               </TableBody>
             </Table>
             {didNotBat.length > 0 && (
-                <div className="p-4 text-xs bg-muted">
+                <div className="p-3 text-xs bg-muted/30 rounded-b-md">
                     <p className="font-semibold mb-1">Yet to bat:</p>
-                    <p className="text-muted-foreground">{didNotBat.map(p => p.name).join(', ')}</p>
+                    <p className="text-muted-foreground leading-tight">{didNotBat.map(p => p.name).join(', ')}</p>
                 </div>
             )}
         </div>
@@ -78,40 +79,44 @@ export default function Scoreboard({ match, setMatch, onBowlerChange, isSimulati
     const bowlers = innings.bowlingTeam.players.filter((p: Player) => (!p.isSubstitute || p.isImpactPlayer) && p.bowling.ballsBowled > 0);
 
     return (
-        <Table>
-          <TableHeader>
-            <TableRow className="border-b-white/10">
-              <TableHead className="w-[40%] font-bold">Bowler</TableHead>
-              <TableHead className="text-right font-bold">O</TableHead>
-              <TableHead className="text-right">M</TableHead>
-              <TableHead className="text-right">R</TableHead>
-              <TableHead className="text-right font-bold">W</TableHead>
-              <TableHead className="text-right">Econ</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {bowlers.map((player: Player) => (
-              <TableRow key={player.id} className="border-0">
-                <TableCell className="font-semibold">
-                    {player.name}{player.isImpactPlayer ? <Badge variant="outline" className="ml-2">IP</Badge> : ''}
-                </TableCell>
-                <TableCell className="text-right">{Math.floor(player.bowling.ballsBowled / 6)}.{player.bowling.ballsBowled % 6}</TableCell>
-                <TableCell className="text-right">{player.bowling.maidens}</TableCell>
-                <TableCell className="text-right">{player.bowling.runsConceded}</TableCell>
-                <TableCell className="text-right font-bold">{player.bowling.wickets}</TableCell>
-                <TableCell className="text-right">{player.bowling.economyRate.toFixed(2)}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <div className="bg-card/50 rounded-md p-2">
+            <h4 className="text-base font-semibold mb-2">Bowling</h4>
+            <Table>
+              <TableHeader>
+                <TableRow className="border-b-muted/50">
+                  <TableHead className="w-[40%] font-semibold">Bowler</TableHead>
+                  <TableHead className="text-right font-semibold">O</TableHead>
+                  <TableHead className="text-right">M</TableHead>
+                  <TableHead className="text-right">R</TableHead>
+                  <TableHead className="text-right font-semibold">W</TableHead>
+                  <TableHead className="text-right">Econ</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {bowlers.map((player: Player) => (
+                  <TableRow key={player.id} className="border-0 text-sm">
+                    <TableCell className="font-medium py-1">
+                        {player.name}{player.isImpactPlayer ? <Badge variant="outline" className="ml-1 text-xs px-1 py-0.5 font-normal">IP</Badge> : ''}
+                    </TableCell>
+                    <TableCell className="text-right py-1">{Math.floor(player.bowling.ballsBowled / 6)}.{player.bowling.ballsBowled % 6}</TableCell>
+                    <TableCell className="text-right py-1">{player.bowling.maidens}</TableCell>
+                    <TableCell className="text-right py-1">{player.bowling.runsConceded}</TableCell>
+                    <TableCell className="text-right py-1 font-medium">{player.bowling.wickets}</TableCell>
+                    <TableCell className="text-right py-1">{player.bowling.economyRate.toFixed(2)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+        </div>
       );
   }
   
   const FallOfWickets = ({ innings }: { innings: Innings }) => (
-    <div className="p-4 space-y-2 text-sm bg-card">
+    <div className="bg-card/50 rounded-md p-3 space-y-2">
+         <h4 className="text-base font-semibold mb-1">Fall of Wickets</h4>
         {innings.fallOfWickets.map((fow: any, index: number) => (
-            <p key={index} className="text-sm">
-                <span className="font-bold">{fow.score}-{fow.wicket}</span> ({fow.playerOut}, {fow.over.toFixed(1)} ov)
+            <p key={index} className="text-sm text-muted-foreground leading-tight">
+                <span className="font-medium text-foreground">{fow.score}-{fow.wicket}</span> ({fow.playerOut}, {fow.over.toFixed(1)} ov)
             </p>
         ))}
     </div>
@@ -135,21 +140,21 @@ export default function Scoreboard({ match, setMatch, onBowlerChange, isSimulati
     const sortedOvers = Object.keys(ballsByOver).map(Number).sort((a, b) => b - a);
 
     return (
-        <div className="p-4 space-y-4 bg-card">
+        <div className="p-4 space-y-4 bg-muted/40">
             {sortedOvers.map(overNum => (
-                <div key={overNum} className="flex items-center gap-2">
-                    <p className="text-sm text-muted-foreground w-16">Ov {overNum + 1}</p>
+                <div key={overNum} className="flex items-center gap-2 bg-card rounded-md p-3">
+                    <p className="text-sm text-muted-foreground w-12 font-semibold">Ov {overNum + 1}</p>
                     <Separator orientation="vertical" className="h-6"/>
-                    <div className="flex flex-wrap gap-1">
+                    <div className="flex flex-wrap gap-1.5">
                         {ballsByOver[overNum].map((ball, ballIndex) => (
                              <span key={ballIndex} 
-                                className={`flex items-center justify-center h-7 w-7 rounded-full font-bold text-xs border
+                                className={`flex items-center justify-center h-6 w-6 rounded-full font-bold text-xs border
                                 ${ball.event === 'w' ? 'bg-destructive text-destructive-foreground border-destructive' : 'border-transparent'}
-                                ${['wd', 'nb', 'lb', 'b'].includes(ball.event) ? 'bg-secondary text-secondary-foreground' : ''}
-                                ${ball.runs === 4 ? 'bg-primary text-white' : ''}
-                                ${ball.runs === 6 ? 'bg-purple-600 text-white' : ''}
-                                ${ball.event === 'run' && ball.runs > 0 && ball.runs < 4 ? 'bg-primary/20' : ''}
-                                ${ball.event === 'run' && ball.runs === 0 ? 'bg-muted/50' : ''}
+                                ${['wd', 'nb', 'lb', 'b'].includes(ball.event) ? 'bg-yellow-500 text-yellow-950 border-yellow-500' : ''} /* Changed extra colors */
+                                ${ball.runs === 4 ? 'bg-blue-600 text-white border-blue-600' : ''} /* Changed 4 color */
+                                ${ball.runs === 6 ? 'bg-green-600 text-white border-green-600' : ''} /* Changed 6 color */
+                                ${ball.event === 'run' && ball.runs > 0 && ball.runs < 4 ? 'bg-primary/20 border-primary/20' : ''} /* Added border to runs */
+                                ${ball.event === 'run' && ball.runs === 0 ? 'bg-muted/50 border-muted/50' : ''} /* Added border to dots */
                             `}>
                                 {ball.display}
                             </span>
@@ -165,8 +170,8 @@ export default function Scoreboard({ match, setMatch, onBowlerChange, isSimulati
     const availableBowlers = currentInnings.bowlingTeam.players.filter(p => (!p.isSubstitute || p.isImpactPlayer));
 
     return (
-        <div className="p-6 space-y-4 text-center">
-            <h4 className="font-headline text-lg">Select Next Bowler</h4>
+        <div className="p-6 space-y-4 text-center bg-muted/40 rounded-b-lg">
+            <h4 className="font-semibold text-lg">Select Next Bowler</h4>
             <p className="text-muted-foreground text-sm">Choose the player to bowl the next over.</p>
             <Select onValueChange={(val) => onBowlerChange(parseInt(val, 10))}>
                 <SelectTrigger id="bowler-select" className="w-[75%] mx-auto">
@@ -237,7 +242,7 @@ export default function Scoreboard({ match, setMatch, onBowlerChange, isSimulati
       };
 
       return (
-          <div className="p-4 h-80 bg-card">
+          <div className="p-4 h-80 bg-card/50 rounded-md">
               <ChartContainer config={chartConfig} className="w-full h-full">
                   <AreaChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -270,41 +275,41 @@ export default function Scoreboard({ match, setMatch, onBowlerChange, isSimulati
   const showBowlerSelection = currentInnings.currentBowler === -1 && match.status === 'inprogress' && currentInnings.overs < match.oversPerInnings;
 
   return (
-    <Card>
-        <CardContent className="p-0">
+    <Card className="shadow-none border-0">
+        <CardContent className="p-0 bg-muted/40 rounded-lg">
             {showBowlerSelection && !isSimulating ? (
                 <BowlerSelection />
             ) : (
-                <Tabs defaultValue="scoreboard">
-                    <TabsList className="w-full justify-around rounded-t-lg rounded-b-none p-0 h-auto bg-card border-b">
-                        <TabsTrigger value="scoreboard" className="w-1/3 py-3 data-[state=active]:bg-secondary data-[state=active]:shadow-inner rounded-tl-lg">Scoreboard</TabsTrigger>
-                        <TabsTrigger value="timeline" className="w-1/3 py-3 data-[state=active]:bg-secondary data-[state=active]:shadow-inner">Timeline</TabsTrigger>
-                        <TabsTrigger value="runrate" className="w-1/3 py-3 data-[state=active]:bg-secondary data-[state=active]:shadow-inner rounded-tr-lg">Run Rate</TabsTrigger>
+                <Tabs defaultValue="scoreboard" className="w-full">
+                    <TabsList className="grid w-full grid-cols-3 rounded-b-none h-auto bg-card border-b">
+                        <TabsTrigger value="scoreboard" className="rounded-none rounded-tl-lg">Scoreboard</TabsTrigger>
+                        <TabsTrigger value="timeline" className="rounded-none">Timeline</TabsTrigger>
+                        <TabsTrigger value="runrate" className="rounded-none rounded-tr-lg">Run Rate</TabsTrigger>
                     </TabsList>
-                    <TabsContent value="scoreboard" className="space-y-2 bg-muted/40">
+                    <TabsContent value="scoreboard" className="p-3 space-y-3">
                         <Tabs defaultValue="innings1">
-                            <TabsList className="w-full justify-around bg-card p-0 h-auto border-b">
-                                <TabsTrigger value="innings1" className="w-1/2 py-2 data-[state=active]:bg-primary/10 data-[state=active]:text-primary-foreground">{innings1.battingTeam.name}</TabsTrigger>
-                                {innings2 && <TabsTrigger value="innings2" className="w-1/2 py-2 data-[state=active]:bg-primary/10 data-[state=active]:text-primary-foreground">{innings2.battingTeam.name}</TabsTrigger>}
+                            <TabsList className="grid w-full grid-cols-2 bg-card rounded-md">
+                                <TabsTrigger value="innings1" className="rounded-md data-[state=active]:bg-primary/10">{innings1.battingTeam.name}</TabsTrigger>
+                                {innings2 && <TabsTrigger value="innings2" className="rounded-md data-[state=active]:bg-primary/10">{innings2.battingTeam.name}</TabsTrigger>}
                             </TabsList>
-                            <TabsContent value="innings1" className="p-0 space-y-2">
-                                <Card><CardHeader className="p-3 bg-secondary/50"><CardTitle className="text-base font-headline">Batting</CardTitle></CardHeader><CardContent className="p-0"><BattingCard innings={innings1} /></CardContent></Card>
-                                <Card><CardHeader className="p-3 bg-secondary/50"><CardTitle className="text-base font-headline">Bowling</CardTitle></CardHeader><CardContent className="p-0"><BowlingCard innings={innings1} /></CardContent></Card>
-                                {innings1.fallOfWickets.length > 0 && <Card><CardHeader className="p-3 bg-secondary/50"><CardTitle className="text-base font-headline">Fall of Wickets</CardTitle></CardHeader><CardContent><FallOfWickets innings={innings1}/></CardContent></Card>}
+                            <TabsContent value="innings1" className="p-0 space-y-3">
+                                <BattingCard innings={innings1} />
+                                <BowlingCard innings={innings1} />
+                                {innings1.fallOfWickets.length > 0 && <FallOfWickets innings={innings1}/>}
                             </TabsContent>
                             {innings2 && (
-                                <TabsContent value="innings2" className="p-0 space-y-2">
-                                    <Card><CardHeader className="p-3 bg-secondary/50"><CardTitle className="text-base font-headline">Batting</CardTitle></CardHeader><CardContent className="p-0"><BattingCard innings={innings2} /></CardContent></Card>
-                                    <Card><CardHeader className="p-3 bg-secondary/50"><CardTitle className="text-base font-headline">Bowling</CardTitle></CardHeader><CardContent className="p-0"><BowlingCard innings={innings2} /></CardContent></Card>
-                                    {innings2.fallOfWickets.length > 0 && <Card><CardHeader className="p-3 bg-secondary/50"><CardTitle className="text-base font-headline">Fall of Wickets</CardTitle></CardHeader><CardContent><FallOfWickets innings={innings2}/></CardContent></Card>}
+                                <TabsContent value="innings2" className="p-0 space-y-3">
+                                    <BattingCard innings={innings2} />
+                                    <BowlingCard innings={innings2} />
+                                    {innings2.fallOfWickets.length > 0 && <FallOfWickets innings={innings2}/>}
                                 </TabsContent>
                             )}
                         </Tabs>
                     </TabsContent>
-                    <TabsContent value="timeline">
+                    <TabsContent value="timeline" className="p-0">
                         <Timeline innings={match.innings[match.currentInnings - 1]} />
                     </TabsContent>
-                    <TabsContent value="runrate">
+                     <TabsContent value="runrate" className="p-3">
                         <RunRateChart />
                     </TabsContent>
                 </Tabs>

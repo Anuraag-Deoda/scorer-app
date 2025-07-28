@@ -1,4 +1,4 @@
-import type { Match, MatchSettings, Innings, Team, Player, Ball, BallDetails } from '@/types';
+import type { Match, MatchSettings, Innings, Team, Player, Ball, BallDetails, FielderPlacement } from '@/types';
 
 const MAX_PLAYERS = 11;
 const SQUAD_SIZE = 15;
@@ -46,6 +46,7 @@ function createInnings(battingTeam: Team, bowlingTeam: Team): Innings {
     batsmanOnStrike: playingXI[0]?.id ?? -1,
     batsmanNonStrike: playingXI[1]?.id ?? -1,
     currentBowler: -1, // No bowler selected initially
+    fieldPlacements: [], // Initialize field placements as an empty array
   };
 }
 
@@ -265,7 +266,7 @@ function updateStats(match: Match, ball: BallDetails): Match {
             onStrike.batting.status = 'out';
             
             const fielder = bowlingTeam.players.find((p: Player) => p.id === ball.fielderId);
-            let outDetails = `b. ${bowler.name}`;
+            let outDetails = `c. ${fielder?.name || 'Fielder'} b. ${bowler.name}`;
 
             switch (ball.wicketType) {
                 case "Caught":
@@ -338,6 +339,8 @@ function updateStats(match: Match, ball: BallDetails): Match {
         // Reset bowler for next over
         if (currentInnings.overs < newMatch.oversPerInnings) {
             currentInnings.currentBowler = -1;
+             // Clear field placements at the end of the over
+            newMatch.innings[newMatch.currentInnings - 1].fieldPlacements = [];
         }
     }
 
@@ -470,4 +473,9 @@ export function undoLastBall(match: Match): Match | null {
     return replayedMatch;
 }
 
-    
+export function updateFieldPlacements(match: Match, placements: FielderPlacement[]): Match {
+    const newMatch = JSON.parse(JSON.stringify(match));
+    const currentInnings = newMatch.innings[newMatch.currentInnings - 1];
+    currentInnings.fieldPlacements = placements;
+    return newMatch;
+}
