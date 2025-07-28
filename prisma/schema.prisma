@@ -1,0 +1,111 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Player {
+  id        Int       @id @default(autoincrement())
+  name      String
+  rating    Int?
+  teamPlayers TeamPlayer[]
+  playerStats PlayerStats[]
+  ballsBatted Ball[] @relation("Batsman")
+  ballsBowled Ball[] @relation("Bowler")
+  ballsFielded Ball[] @relation("Fielder")
+}
+
+model Team {
+  id        Int       @id @default(autoincrement())
+  name      String
+  teamPlayers TeamPlayer[]
+  matchesAsTeam1 Match[] @relation("Team1")
+  matchesAsTeam2 Match[] @relation("Team2")
+  battingInnings Innings[] @relation("BattingTeam")
+  bowlingInnings Innings[] @relation("BowlingTeam")
+  playerStats PlayerStats[]
+}
+
+model Match {
+  id        Int       @id @default(autoincrement())
+  date      DateTime  @default(now())
+  team1     Team      @relation("Team1", fields: [team1Id], references: [id])
+  team1Id   Int
+  team2     Team      @relation("Team2", fields: [team2Id], references: [id])
+  team2Id   Int
+  result    String?
+  status    String
+  oversPerInnings Int
+  tossWinnerId Int
+  tossDecision String
+  innings   Innings[]
+  teamPlayers TeamPlayer[]
+  playerStats PlayerStats[]
+}
+
+model TeamPlayer {
+  id        Int     @id @default(autoincrement())
+  team      Team    @relation(fields: [teamId], references: [id])
+  teamId    Int
+  player    Player  @relation(fields: [playerId], references: [id])
+  playerId  Int
+  match     Match   @relation(fields: [matchId], references: [id])
+  matchId   Int
+}
+
+model Innings {
+  id        Int     @id @default(autoincrement())
+  match     Match   @relation(fields: [matchId], references: [id])
+  matchId   Int
+  battingTeam   Team @relation("BattingTeam", fields: [battingTeamId], references: [id])
+  battingTeamId Int
+  bowlingTeam   Team @relation("BowlingTeam", fields: [bowlingTeamId], references: [id])
+  bowlingTeamId Int
+  score     Int
+  wickets   Int
+  overs     Int
+  balls     Ball[]
+}
+
+model Ball {
+  id        Int     @id @default(autoincrement())
+  innings   Innings @relation(fields: [inningsId], references: [id])
+  inningsId Int
+  overNumber Int
+  ballNumber Int
+  batsman   Player  @relation("Batsman", fields: [batsmanId], references: [id])
+  batsmanId Int
+  bowler    Player  @relation("Bowler", fields: [bowlerId], references: [id])
+  bowlerId  Int
+  runs      Int
+  extras    Int
+  event     String
+  wicketType String?
+  fielder   Player? @relation("Fielder", fields: [fielderId], references: [id])
+  fielderId Int?
+}
+
+model PlayerStats {
+  id        Int     @id @default(autoincrement())
+  match     Match   @relation(fields: [matchId], references: [id])
+  matchId   Int
+  player    Player  @relation(fields: [playerId], references: [id])
+  playerId  Int
+  team      Team    @relation(fields: [teamId], references: [id])
+  teamId    Int
+  runs      Int
+  ballsFaced Int
+  fours     Int
+  sixes     Int
+  wickets   Int
+  ballsBowled Int
+  maidens   Int
+  runsConceded Int
+  economyRate Float
+  strikeRate Float
+  isSubstitute Boolean
+  isImpactPlayer Boolean
+}
