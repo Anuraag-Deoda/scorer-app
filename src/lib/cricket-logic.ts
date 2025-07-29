@@ -657,3 +657,15 @@ export function getPowerplayOvers(matchType: MatchType): number {
       return 0;
   }
 }
+
+export function calculateCurrentRunRate(score: number, balls: number): number {
+  if (balls === 0) return 0;
+  return (score / balls) * 6;
+}
+
+export function calculateRequiredRunRate(target: number, score: number, ballsRemaining: number): number {
+  if (ballsRemaining <= 0) return 999; // Infinite RRR
+  const runsNeeded = target - score;
+  if (runsNeeded <= 0) return 0;
+  return (runsNeeded / ballsRemaining) * 6;
+}

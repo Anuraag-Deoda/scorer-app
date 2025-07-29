@@ -3,9 +3,16 @@
 import { useState, useEffect } from "react";
 import type { Match, BallEvent, Team, BallDetails, GenerateMatchCommentaryInput, FielderPlacement } from "@/types"
 import { processBall, undoLastBall, updateFieldPlacements, getMatchSituation, getPowerplayOvers } from "@/lib/cricket-logic"
-import { simulateOver } from "@/ai/flows/simulate-over";
 import { generateMatchCommentary } from "@/ai/flows/generate-match-commentary";
 import { Button } from "@/components/ui/button"
+import { SimulationEngine } from "@/simulation/engine";
+import { RuleBasedStrategy } from "@/simulation/strategies/rule-based-strategy";
+import { AiStrategy } from "@/simulation/strategies/ai-strategy";
+import { StatisticalStrategy } from "@/simulation/strategies/statistical-strategy";
+import { CacheStrategy } from "@/simulation/strategies/cache-strategy";
+import { analyzeContext } from "@/simulation/context-analyzer";
+import { BallOutcome } from "@/simulation/types";
+import { Prisma } from "@prisma/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import Scoreboard from "./scoreboard"
 import { Separator } from "./ui/separator"
@@ -145,68 +152,132 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
   };
   
   const handleSimulateOver = async () => {
-    if(match.status === 'finished') {
-        toast({ variant: "destructive", title: "Cannot Simulate", description: "Match has already finished." });
-        return;
+    if (match.status === 'finished') {
+      toast({ variant: "destructive", title: "Cannot Simulate", description: "Match has already finished." });
+      return;
     }
-     if (currentInnings.currentBowler === -1) {
-        toast({ variant: "destructive", title: "Cannot Simulate", description: "Please select a bowler for the over." });
-        return;
+    if (currentInnings.currentBowler === -1) {
+      toast({ variant: "destructive", title: "Cannot Simulate", description: "Please select a bowler for the over." });
+      return;
     }
     setIsSimulating(true);
 
     try {
-        const bowlingTeamPlayerIds = bowlingTeam.players
-            .filter(p => !p.isSubstitute || p.isImpactPlayer)
-            .map(p => p.id)
-            .join(', ');
+      // 1. Set up the simulation engine
+      const simulationEngine = new SimulationEngine([
+        new CacheStrategy(),
+        new AiStrategy(),
+        new StatisticalStrategy(),
+        new RuleBasedStrategy(),
+      ]);
 
-        const result = await simulateOver({
-            matchContext: getMatchSummaryForAI(match),
-            bowlingTeamPlayerIds
-        });
+      // 2. Create the match context
+      // This is a bit tricky because the client-side Match type is different from the Prisma one.
+      // We need to create a mock Prisma-like object for the context analyzer.
+      // This should be refactored later to have a unified data model.
+      const mockMatchForContext = {
+        ...match,
+        id: 0,
+        date: new Date(),
+        team1Id: match.teams[0].id,
+        team2Id: match.teams[1].id,
+        tossWinnerId: match.teams.find(t => t.name === match.toss.winner)?.id ?? 0,
+        innings: match.innings.map(inning => ({
+          id: 0,
+          matchId: 0,
+          battingTeamId: inning.battingTeam.id,
+          bowlingTeamId: inning.bowlingTeam.id,
+          score: inning.score,
+          wickets: inning.wickets,
+          overs: inning.overs,
+          balls: [], // Placeholder
+        })),
+      };
+
+      const mockCurrentInningsForContext = {
+        id: 0,
+        matchId: 0,
+        battingTeamId: currentInnings.battingTeam.id,
+        bowlingTeamId: currentInnings.bowlingTeam.id,
+        score: currentInnings.score,
+        wickets: currentInnings.wickets,
+        overs: currentInnings.overs,
+        balls: [], // Placeholder
+      };
+
+      const context = analyzeContext(
+        mockMatchForContext as any, // Using 'any' to bridge the type gap for now
+        mockCurrentInningsForContext as any,
+        currentInnings.battingTeam as any,
+        currentInnings.bowlingTeam as any,
+        onStrikeBatsman as any,
+        nonStrikeBatsman as any,
+        currentBowler as any
+      );
+
+      // 3. Run the simulation
+      const result = await simulationEngine.simulateOver(context);
+
+      toast({
+        title: `Simulation Complete (${result.debug.pattern || result.debug.flow})`,
+        description: `Strategy: ${result.cost > 0 ? 'AI' : 'Rule-Based'}. Cost: $${result.cost.toFixed(4)}`,
+      });
+
+      // 4. Process the results
+      let matchState: Match | null = match;
+      for (const outcome of result.outcomes) {
+        await new Promise(resolve => setTimeout(resolve, 800));
         
-        let matchState: Match | null = match;
-        let legalDeliveries = 0;
-        
-        while (legalDeliveries < 6 && matchState && matchState.status !== 'finished') {
-            const ball = result.over.shift();
-            if (!ball) break;
+        const ballDetails = mapOutcomeToBallDetails(outcome);
+        const processedMatchState = processBall(matchState, ballDetails);
 
-            if (ball.event !== 'wd' && ball.event !== 'nb') {
-                legalDeliveries++;
-            }
+        if (processedMatchState) {
+          matchState = processedMatchState;
+          setMatch(matchState);
 
-            await new Promise(resolve => setTimeout(resolve, 800));
-            
-            const processedMatchState = processBall(matchState, { ...ball });
-            
-            if(processedMatchState) {
-                matchState = processedMatchState;
-                const isStillInSameInnings = matchState.currentInnings === match.currentInnings;
-
-                setMatch(matchState);
-
-                if (matchState.status !== 'finished' && isStillInSameInnings) {
-                    const updatedInnings = matchState.innings[matchState.currentInnings - 1];
-                     // Ensure ball number is correct even with extras before legal delivery
-                    const ballsInOver = updatedInnings.timeline.filter(b => Math.floor(b.over ?? 0) === updatedInnings.overs).length;
-                    const ballNum = `${updatedInnings.overs}.${updatedInnings.ballsThisOver}`;
-                    await handleGenerateCommentary(matchState, ball, ballNum);
-                }
-            }
+          if (matchState.status !== 'finished') {
+            const ballNum = `${matchState.innings[matchState.currentInnings - 1].overs}.${matchState.innings[matchState.currentInnings - 1].ballsThisOver}`;
+            await handleGenerateCommentary(matchState, ballDetails, ballNum);
+          }
+        } else {
+          break; // Stop processing if match state is invalid
         }
+      }
 
-        toast({ title: "Over Simulated", description: "AI has completed the over." });
     } catch (error) {
-        console.error("Failed to simulate over", error);
-        toast({
-            variant: "destructive",
-            title: "AI Error",
-            description: "Could not simulate the over.",
-        });
+      console.error("Failed to simulate over", error);
+      toast({
+        variant: "destructive",
+        title: "Simulation Error",
+        description: (error as Error).message,
+      });
     } finally {
-        setIsSimulating(false);
+      setIsSimulating(false);
+    }
+  }
+
+  function mapOutcomeToBallDetails(outcome: BallOutcome): BallDetails {
+    switch (outcome.type) {
+      case 'DOT':
+        return { event: 'run', runs: 0, extras: 0 };
+      case 'SINGLE':
+        return { event: 'run', runs: 1, extras: 0 };
+      case 'DOUBLE':
+        return { event: 'run', runs: 2, extras: 0 };
+      case 'TRIPLE':
+        return { event: 'run', runs: 3, extras: 0 };
+      case 'FOUR':
+        return { event: 'run', runs: 4, extras: 0 };
+      case 'SIX':
+        return { event: 'run', runs: 6, extras: 0 };
+      case 'WICKET':
+        return { event: 'w', runs: 0, extras: 0, wicketType: outcome.wicketType };
+      case 'WIDE':
+        return { event: 'wd', runs: 0, extras: 1 };
+      case 'NO_BALL':
+        return { event: 'nb', runs: 0, extras: 1 };
+      default:
+        return { event: 'run', runs: 0, extras: 0 };
     }
   }
 
