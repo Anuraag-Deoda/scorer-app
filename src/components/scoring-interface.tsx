@@ -133,22 +133,32 @@ Field placements: ${innings.fieldPlacements.map(fp => `${bowlingTeam.players.fin
     `;
   }
   
-  const handleGenerateCommentary = async (matchStateForCommentary: Match | null, ballNumber?: string) => {
+  const handleGenerateCommentary = async (matchStateForCommentary: Match | null, ball: BallDetails, ballNumber?: string) => {
     if (!matchStateForCommentary) return;
-      try {
-        const result = await generateMatchCommentary({
-          matchState: getMatchSummaryForAI(matchStateForCommentary),
-        });
-        const prefix = ballNumber ? `${ballNumber}: ` : '';
-        setCommentary((prev) => [`${prefix}${result.commentary}`, ...prev]);
-      } catch (error) {
-        console.error("Failed to generate commentary", error);
-        toast({
-          variant: "destructive",
-          title: "AI Error",
-          description: "Could not generate commentary at this time.",
-        });
-      }
+
+    const innings = matchStateForCommentary.innings[matchStateForCommentary.currentInnings - 1];
+    const batsman = innings.battingTeam.players.find(p => p.id === innings.batsmanOnStrike)?.name || 'Unknown';
+    const bowler = innings.bowlingTeam.players.find(p => p.id === innings.currentBowler)?.name || 'Unknown';
+    const fielder = ball.fielderId ? innings.bowlingTeam.players.find(p => p.id === ball.fielderId)?.name : undefined;
+
+    try {
+      const result = await generateMatchCommentary({
+        ball,
+        batsman,
+        bowler,
+        fielder,
+        matchState: getMatchSummaryForAI(matchStateForCommentary),
+      });
+      const prefix = ballNumber ? `${ballNumber}: ` : '';
+      setCommentary((prev) => [`${prefix}${result.commentary}`, ...prev]);
+    } catch (error) {
+      console.error("Failed to generate commentary", error);
+      toast({
+        variant: "destructive",
+        title: "AI Error",
+        description: "Could not generate commentary at this time.",
+      });
+    }
   };
   
   const handleSimulateOver = async () => {
@@ -180,9 +190,10 @@ Field placements: ${innings.fieldPlacements.map(fp => `${bowlingTeam.players.fin
 
             await new Promise(resolve => setTimeout(resolve, 800));
             
-            matchState = processBall(matchState, { ...ball });
+            const processedMatchState = processBall(matchState, { ...ball });
             
-            if(matchState) {
+            if(processedMatchState) {
+                matchState = processedMatchState;
                 const isStillInSameInnings = matchState.currentInnings === match.currentInnings;
 
                 setMatch(matchState);
@@ -191,8 +202,8 @@ Field placements: ${innings.fieldPlacements.map(fp => `${bowlingTeam.players.fin
                     const updatedInnings = matchState.innings[matchState.currentInnings - 1];
                      // Ensure ball number is correct even with extras before legal delivery
                     const ballsInOver = updatedInnings.timeline.filter(b => Math.floor(b.over ?? 0) === updatedInnings.overs).length;
-                    const ballNum = `${updatedInnings.overs}.${ballsInOver}`;
-                    await handleGenerateCommentary(matchState, ballNum);
+                    const ballNum = `${updatedInnings.overs}.${updatedInnings.ballsThisOver}`;
+                    await handleGenerateCommentary(matchState, ball, ballNum);
                 }
             }
         }
@@ -416,7 +427,7 @@ Field placements: ${innings.fieldPlacements.map(fp => `${bowlingTeam.players.fin
         </Card>
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
             <Scoreboard match={match} setMatch={setMatch} onBowlerChange={handleBowlerChange} isSimulating={isSimulating} />
-            <CommentaryGenerator match={match} commentary={commentary} setCommentary={setCommentary} onGenerateCommentary={() => handleGenerateCommentary(match)} />
+            <CommentaryGenerator match={match} commentary={commentary} setCommentary={setCommentary} onGenerateCommentary={() => handleGenerateCommentary(match, match.innings[match.currentInnings - 1].timeline[match.innings[match.currentInnings - 1].timeline.length - 1])} />
         </div>
       </div>
       <ManagePlayersDialog

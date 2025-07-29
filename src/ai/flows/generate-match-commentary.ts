@@ -33,9 +33,27 @@ const prompt = ai.definePrompt({
     - "Fielder ne koshish toh ki, lekin ball thi tez, boundary mil gayi."
     - "Ye hai asli Akash Chopra style commentary – maza aa gaya!"
 
-  Based on the current match state, generate 1-2 lines of such commentary.
+  Based on the ball-by-ball details and the overall match context, generate 1-2 lines of commentary.
 
-  Match State: {{{matchState}}}`,
+  **Ball Details:**
+  - Event: {{ball.event}}
+  - Runs: {{ball.runs}}
+  - Extras: {{ball.extras}}
+  {{#if ball.isWicket}}
+  - Wicket Type: {{ball.wicketType}}
+  {{/if}}
+  {{#if fielder}}
+  - Fielder: {{fielder}}
+  {{/if}}
+
+  **Players:**
+  - Batsman: {{batsman}}
+  - Bowler: {{bowler}}
+
+  **Match State:**
+  {{{matchState}}}
+  
+  **Commentary:**`,
 });
 
 const generateMatchCommentaryFlow = ai.defineFlow(

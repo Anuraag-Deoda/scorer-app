@@ -1,11 +1,36 @@
 import { z } from 'zod';
 
+// Enums for player roles and bowling styles
+export enum PlayerRole {
+  Batsman = 'Batsman',
+  Bowler = 'Bowler',
+  AllRounder = 'All-rounder',
+  WicketKeeper = 'Wicket Keeper',
+}
+
+export enum BowlingStyle {
+  Fast = 'Fast',
+  Medium = 'Medium',
+  LegSpin = 'Leg Spin',
+  OffSpin = 'Off Spin',
+  LeftArmOrthodox = 'Left-arm Orthodox', // Added left-arm spin
+  LeftArmChinaman = 'Left-arm Chinaman', // Added left-arm wrist spin
+  RightArmFastMedium = 'Right-arm Fast-Medium', // More specific pace types
+  RightArmMediumFast = 'Right-arm Medium-Fast',
+  RightArmMedium = 'Right-arm Medium',
+  LeftArmFast = 'Left-arm Fast',
+  LeftArmMediumFast = 'Left-arm Medium-Fast',
+  LeftArmMedium = 'Left-arm Medium',
+}
+
 export interface Player {
   id: number;
   name: string;
   rating?: number;
   isSubstitute?: boolean;
   isImpactPlayer?: boolean;
+  role?: PlayerRole; // Added role field
+  bowlingStyle?: BowlingStyle; // Added bowlingStyle field
   batting: {
     runs: number;
     ballsFaced: number;
@@ -31,10 +56,9 @@ export interface Team {
   impactPlayerUsed?: boolean;
 }
 
-// New interface for Fielder Placement
 export interface FielderPlacement {
   playerId: number;
-  position: string; // Consider using a more specific type or enum for positions later
+  position: string;
 }
 
 export interface Ball {
@@ -73,7 +97,7 @@ export interface Innings {
   batsmanOnStrike: number;
   batsmanNonStrike: number;
   currentBowler: number;
-  fieldPlacements?: FielderPlacement[]; // Added field placements to Innings
+  fieldPlacements?: FielderPlacement[];
 }
 
 export interface Match {
@@ -112,6 +136,10 @@ export interface BallDetails {
 // AI Flow Schemas
 
 export const GenerateMatchCommentaryInputSchema = z.object({
+  ball: z.any().describe('The ball object with event details.'),
+  batsman: z.string().describe('The name of the batsman on strike.'),
+  bowler: z.string().describe('The name of the bowler.'),
+  fielder: z.string().optional().describe('The name of the fielder involved in a wicket.'),
   matchState: z.string().describe('The current state of the match.'),
 });
 export type GenerateMatchCommentaryInput = z.infer<typeof GenerateMatchCommentaryInputSchema>;

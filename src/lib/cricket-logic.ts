@@ -1,16 +1,19 @@
-import type { Match, MatchSettings, Innings, Team, Player, Ball, BallDetails, FielderPlacement } from '@/types';
+import type { Match, MatchSettings, Innings, Team, Player, Ball, BallDetails, FielderPlacement, PlayerRole, BowlingStyle } from '@/types';
+import { PlayerRole as PlayerRoleEnum, BowlingStyle as BowlingStyleEnum } from '@/types';
 
 const MAX_PLAYERS = 11;
 const SQUAD_SIZE = 15;
 const SAVED_TEAMS_KEY = 'cricket-clash-saved-teams';
 
-function createPlayer(id: number, name: string, rating: number): Player {
+function createPlayer(id: number, name: string, rating: number, role?: PlayerRole, bowlingStyle?: BowlingStyle): Player {
   return {
     id,
     name,
     rating,
     isSubstitute: false,
     isImpactPlayer: false,
+    role: role, // Initialize role
+    bowlingStyle: bowlingStyle, // Initialize bowlingStyle
     batting: { runs: 0, ballsFaced: 0, fours: 0, sixes: 0, status: 'did not bat', strikeRate: 0 },
     bowling: { ballsBowled: 0, runsConceded: 0, maidens: 0, wickets: 0, economyRate: 0 },
   };
@@ -63,10 +66,26 @@ export function createMatch(settings: MatchSettings, allPlayers: Player[]): Matc
 
   const getTeamPlayers = (name: string): Player[] => {
       if (savedTeams[name]) {
-          return savedTeams[name].map(p => createPlayer(p.id, p.name, p.rating ?? 75));
+          // When loading from saved teams, ensure role and bowlingStyle are carried over
+          return savedTeams[name].map(p => createPlayer(p.id, p.name, p.rating ?? 75, p.role, p.bowlingStyle));
       }
       const shuffledPlayers = [...allPlayers].sort(() => 0.5 - Math.random());
-      return shuffledPlayers.slice(0, SQUAD_SIZE).map(p => createPlayer(p.id, p.name, p.rating ?? 75));
+      // Assign default roles/bowling styles or handle appropriately
+      return shuffledPlayers.slice(0, SQUAD_SIZE).map((p, index) => {
+        let role = PlayerRoleEnum.Batsman; // Default role
+        let bowlingStyle: BowlingStyle | undefined = undefined;
+
+        // Simple assignment for demonstration - replace with more sophisticated logic
+        if (index === 0) role = PlayerRoleEnum.WicketKeeper; // Assume first player is WK
+        else if (index >= 7) { // Assume players 8-11 are bowlers/allrounders
+            role = Math.random() > 0.5 ? PlayerRoleEnum.Bowler : PlayerRoleEnum.AllRounder;
+            // Assign a random bowling style for bowlers/allrounders
+            const styles = Object.values(BowlingStyleEnum);
+            bowlingStyle = styles[Math.floor(Math.random() * styles.length)];
+        }
+
+        return createPlayer(p.id, p.name, p.rating ?? 75, role, bowlingStyle);
+      });
   };
   
   const team1Players = getTeamPlayers(settings.teamNames[0]);
@@ -168,7 +187,10 @@ function finishMatch(match: Match): Match {
         team.players.forEach((player: Player) => {
             const originalPlayer = allPlayersFromMatch(match).find(p => p.id === player.id);
             if(originalPlayer) {
+              // When updating ratings, retain role and bowlingStyle
               player.rating = calculateRatingUpdate(originalPlayer);
+              player.role = originalPlayer.role; 
+              player.bowlingStyle = originalPlayer.bowlingStyle;
             }
         });
         savedTeams[team.name] = JSON.parse(JSON.stringify(team.players));
@@ -201,6 +223,9 @@ function allPlayersFromMatch(match: Match): Player[] {
                 }
                 if (p.isSubstitute) existingPlayer.isSubstitute = p.isSubstitute;
                 if (p.isImpactPlayer) existingPlayer.isImpactPlayer = p.isImpactPlayer;
+                // Ensure role and bowlingStyle are copied over
+                if (p.role) existingPlayer.role = p.role;
+                if (p.bowlingStyle) existingPlayer.bowlingStyle = p.bowlingStyle;
             }
         });
     });
@@ -478,4 +503,38 @@ export function updateFieldPlacements(match: Match, placements: FielderPlacement
     const currentInnings = newMatch.innings[newMatch.currentInnings - 1];
     currentInnings.fieldPlacements = placements;
     return newMatch;
+}
+
+// Function to update player roles and bowling styles
+export function updatePlayerAttributes(match: Match, teamId: number, playerId: number, role?: PlayerRole, bowlingStyle?: BowlingStyle): Match {
+    const newMatch = JSON.parse(JSON.stringify(match));
+    const team = newMatch.teams.find(t => t.id === teamId);
+    if (!team) return newMatch; // Should not happen
+
+    const player = team.players.find(p => p.id === playerId);
+    if (!player) return newMatch; // Should not happen
+
+    if (role !== undefined) player.role = role;
+    if (bowlingStyle !== undefined) player.bowlingStyle = bowlingStyle;
+
+    // Also update in the other team's player list if the player exists there (e.g., for rating updates)
+    const otherTeam = newMatch.teams.find(t => t.id !== teamId);
+    if (otherTeam) {
+        const playerInOtherTeam = otherTeam.players.find(p => p.id === playerId);
+        if (playerInOtherTeam) {
+            if (role !== undefined) playerInOtherTeam.role = role;
+            if (bowlingStyle !== undefined) playerInOtherTeam.bowlingStyle = bowlingStyle;
+        }
+    }
+
+    return newMatch;
+}
+
+// Function to get available bowlers, excluding wicket keepers
+export function getAvailableBowlers(innings: Innings): Player[] {
+    return innings.bowlingTeam.players.filter(p => 
+        (!p.isSubstitute || p.isImpactPlayer) && 
+        p.id !== innings.currentBowler && // Exclude current bowler
+        p.role !== PlayerRoleEnum.WicketKeeper // Exclude wicket keepers
+    );
 }

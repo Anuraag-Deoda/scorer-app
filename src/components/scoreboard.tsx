@@ -271,6 +271,102 @@ export default function Scoreboard({ match, setMatch, onBowlerChange, isSimulati
       );
   };
 
+  const WormGraph = () => {
+    const getOverByOverData = (innings: Innings) => {
+        const overData: {over: number, score: number, wickets: number}[] = [];
+        if (!innings) return overData;
+        
+        let score = 0;
+        let wickets = 0;
+        const maxOvers = Math.max(innings.overs, 1);
+
+        for (let i = 0; i < maxOvers; i++) {
+            const ballsInThisOver = innings.timeline.filter(b => Math.floor(b.over ?? 0) === i);
+            const runsInThisOver = ballsInThisOver.reduce((acc, ball) => acc + ball.runs + ball.extras, 0);
+            const wicketsInThisOver = ballsInThisOver.filter(b => b.isWicket).length;
+            
+            score += runsInThisOver;
+            wickets += wicketsInThisOver;
+            
+            const legalBallsThisOver = ballsInThisOver.filter(b => b.event !== 'wd' && b.event !== 'nb').length;
+            
+            if(legalBallsThisOver > 0 || i === 0){
+              overData.push({
+                  over: i + 1,
+                  score: score,
+                  wickets: wickets,
+              });
+            }
+        }
+        return overData;
+    };
+
+    const innings1Data = getOverByOverData(innings1);
+    const innings2Data = innings2 ? getOverByOverData(innings2) : [];
+
+    const chartData = Array.from({length: Math.max(innings1Data.length, innings2Data.length)}, (_, i) => {
+        const data1 = innings1Data[i];
+        const data2 = innings2Data[i];
+        return {
+            over: i + 1,
+            [`${innings1.battingTeam.name}_score`]: data1?.score,
+            [`${innings2 ? innings2.battingTeam.name : ''}_score`]: data2?.score,
+            [`${innings1.battingTeam.name}_wickets`]: innings1.timeline.filter(b => b.isWicket && Math.floor(b.over ?? 0) === i),
+            [`${innings2 ? innings2.battingTeam.name : ''}_wickets`]: innings2 ? innings2.timeline.filter(b => b.isWicket && Math.floor(b.over ?? 0) === i) : [],
+        }
+    });
+    
+    const chartConfig = {
+        [innings1.battingTeam.name]: {
+            label: innings1.battingTeam.name,
+            color: "hsl(var(--chart-1))",
+        },
+        ...(innings2 ? {
+            [innings2.battingTeam.name]: {
+                label: innings2.battingTeam.name,
+                color: "hsl(var(--chart-2))",
+            }
+        } : {})
+    };
+
+    const CustomDot = (props: any) => {
+      const { cx, cy, payload, dataKey } = props;
+      const teamName = dataKey.split('_')[0];
+      const wickets = payload[`${teamName}_wickets`];
+
+      if (wickets && wickets.length > 0) {
+        return (
+          <g>
+            {wickets.map((wicket: any, index: number) => (
+              <circle key={index} cx={cx} cy={cy} r={5} fill="red" stroke="white" strokeWidth={1} />
+            ))}
+          </g>
+        );
+      }
+
+      return null;
+    };
+
+    return (
+        <div className="p-4 h-80 bg-card/50 rounded-md">
+            <ChartContainer config={chartConfig} className="w-full h-full">
+                <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="over" tickLine={false} axisLine={false} tickMargin={8} label={{ value: 'Overs', position: 'insideBottom', offset: -10 }} />
+                    <YAxis tickLine={false} axisLine={false} tickMargin={8} label={{ value: 'Score', angle: -90, position: 'insideLeft' }} />
+                    <ChartTooltip
+                      cursor={false}
+                      content={<ChartTooltipContent indicator="line" />}
+                    />
+                    <Legend align="right" verticalAlign="top" iconType="circle" />
+                    <Line type="monotone" dataKey={`${innings1.battingTeam.name}_score`} name={innings1.battingTeam.name} stroke={`hsl(var(--chart-1))`} strokeWidth={2} dot={<CustomDot />} />
+                    {innings2 && <Line type="monotone" dataKey={`${innings2.battingTeam.name}_score`} name={innings2.battingTeam.name} stroke={`hsl(var(--chart-2))`} strokeWidth={2} dot={<CustomDot />} />}
+                </LineChart>
+            </ChartContainer>
+        </div>
+    );
+  };
+
 
   const showBowlerSelection = currentInnings.currentBowler === -1 && match.status === 'inprogress' && currentInnings.overs < match.oversPerInnings;
 
@@ -281,10 +377,12 @@ export default function Scoreboard({ match, setMatch, onBowlerChange, isSimulati
                 <BowlerSelection />
             ) : (
                 <Tabs defaultValue="scoreboard" className="w-full">
-                    <TabsList className="grid w-full grid-cols-3 rounded-b-none h-auto bg-card border-b">
+                    <TabsList className="grid w-full grid-cols-5 rounded-b-none h-auto bg-card border-b">
                         <TabsTrigger value="scoreboard" className="rounded-none rounded-tl-lg">Scoreboard</TabsTrigger>
                         <TabsTrigger value="timeline" className="rounded-none">Timeline</TabsTrigger>
-                        <TabsTrigger value="runrate" className="rounded-none rounded-tr-lg">Run Rate</TabsTrigger>
+                        <TabsTrigger value="runrate" className="rounded-none">Run Rate</TabsTrigger>
+                        <TabsTrigger value="worm" className="rounded-none">Worm</TabsTrigger>
+                        <TabsTrigger value="fow" className="rounded-none rounded-tr-lg">FoW</TabsTrigger>
                     </TabsList>
                     <TabsContent value="scoreboard" className="p-3 space-y-3">
                         <Tabs defaultValue="innings1">
@@ -292,16 +390,14 @@ export default function Scoreboard({ match, setMatch, onBowlerChange, isSimulati
                                 <TabsTrigger value="innings1" className="rounded-md data-[state=active]:bg-primary/10">{innings1.battingTeam.name}</TabsTrigger>
                                 {innings2 && <TabsTrigger value="innings2" className="rounded-md data-[state=active]:bg-primary/10">{innings2.battingTeam.name}</TabsTrigger>}
                             </TabsList>
-                            <TabsContent value="innings1" className="p-0 space-y-3">
+                            <TabsContent value="innings1" className="p-0 pt-3 space-y-3">
                                 <BattingCard innings={innings1} />
                                 <BowlingCard innings={innings1} />
-                                {innings1.fallOfWickets.length > 0 && <FallOfWickets innings={innings1}/>}
                             </TabsContent>
                             {innings2 && (
-                                <TabsContent value="innings2" className="p-0 space-y-3">
+                                <TabsContent value="innings2" className="p-0 pt-3 space-y-3">
                                     <BattingCard innings={innings2} />
                                     <BowlingCard innings={innings2} />
-                                    {innings2.fallOfWickets.length > 0 && <FallOfWickets innings={innings2}/>}
                                 </TabsContent>
                             )}
                         </Tabs>
@@ -311,6 +407,25 @@ export default function Scoreboard({ match, setMatch, onBowlerChange, isSimulati
                     </TabsContent>
                      <TabsContent value="runrate" className="p-3">
                         <RunRateChart />
+                    </TabsContent>
+                    <TabsContent value="worm" className="p-3">
+                        <WormGraph />
+                    </TabsContent>
+                    <TabsContent value="fow" className="p-3 space-y-3">
+                        <Tabs defaultValue="innings1">
+                            <TabsList className="grid w-full grid-cols-2 bg-card rounded-md">
+                                <TabsTrigger value="innings1" className="rounded-md data-[state=active]:bg-primary/10">{innings1.battingTeam.name}</TabsTrigger>
+                                {innings2 && <TabsTrigger value="innings2" className="rounded-md data-[state=active]:bg-primary/10">{innings2.battingTeam.name}</TabsTrigger>}
+                            </TabsList>
+                            <TabsContent value="innings1" className="p-0 pt-3 space-y-3">
+                                {innings1.fallOfWickets.length > 0 ? <FallOfWickets innings={innings1}/> : <p className="p-4 text-center text-muted-foreground">No wickets have fallen yet.</p>}
+                            </TabsContent>
+                            {innings2 && (
+                                <TabsContent value="innings2" className="p-0 pt-3 space-y-3">
+                                    {innings2.fallOfWickets.length > 0 ? <FallOfWickets innings={innings2}/> : <p className="p-4 text-center text-muted-foreground">No wickets have fallen yet.</p>}
+                                </TabsContent>
+                            )}
+                        </Tabs>
                     </TabsContent>
                 </Tabs>
             )}
