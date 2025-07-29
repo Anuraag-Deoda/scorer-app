@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import type { Match, BallEvent, Team, BallDetails, GenerateMatchCommentaryInput, FielderPlacement } from "@/types"
-import { processBall, undoLastBall, updateFieldPlacements } from "@/lib/cricket-logic"
+import { processBall, undoLastBall, updateFieldPlacements, getMatchSituation, getPowerplayOvers } from "@/lib/cricket-logic"
 import { simulateOver } from "@/ai/flows/simulate-over";
 import { generateMatchCommentary } from "@/ai/flows/generate-match-commentary";
 import { Button } from "@/components/ui/button"
@@ -97,40 +97,23 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
   }
 
   const getMatchSummaryForAI = (matchState: Match): string => {
+    const situation = getMatchSituation(matchState);
     const innings = matchState.innings[matchState.currentInnings - 1];
+    const powerplayOvers = getPowerplayOvers(matchState.matchType);
+    const isPowerplay = innings.overs < powerplayOvers;
     const onStrike = innings.battingTeam.players.find(p => p.id === innings.batsmanOnStrike);
     const nonStrike = innings.battingTeam.players.find(p => p.id === innings.batsmanNonStrike);
     const bowler = innings.bowlingTeam.players.find(p => p.id === innings.currentBowler);
-    
-    // Include previous over data if available
-    const prevInnings = matchState.innings[matchState.currentInnings - 1];
-    const lastOver = prevInnings.overs > 0 
-        ? prevInnings.timeline.filter(ball => Math.floor(ball.over ?? 0) === prevInnings.overs -1)
-        : [];
-    const prevOverSummary = lastOver.length > 0 
-        ? `
-Previous over (${prevInnings.overs}): ${lastOver.map(ball => ball.display).join(', ')}`
-        : '';
 
-     // Include field placements if available
-     const fieldPlacementSummary = innings.fieldPlacements && innings.fieldPlacements.length > 0 
-        ? `
-Field placements: ${innings.fieldPlacements.map(fp => `${bowlingTeam.players.find(p => p.id === fp.playerId)?.name || 'Unknown'}: ${fp.position}`).join(', ')}`
-        : '';
-
-    
-    return `
-      Match: ${innings.battingTeam.name} vs ${innings.bowlingTeam.name}.
-      Innings: ${matchState.currentInnings}.
-      Score: ${innings.score}/${innings.wickets} in ${innings.overs}.${innings.ballsThisOver} overs.
-      Target: ${matchState.currentInnings === 2 ? matchState.innings[0].score + 1 : 'N/A'}.
-      On strike: ${onStrike?.name} (${onStrike?.batting.runs} runs).
-      Non-striker: ${nonStrike?.name} (${nonStrike?.batting.runs} runs).
-      Bowler: ${bowler?.name}.
-      Last ball: ${innings.timeline.length > 0 ? innings.timeline[innings.timeline.length - 1].display : 'N/A'}.
-      ${prevOverSummary}
-      ${fieldPlacementSummary}
-    `;
+    let summary = `Innings ${situation.innings}: ${situation.battingTeamName} are ${innings.score}/${innings.wickets} after ${innings.overs}.${innings.ballsThisOver} overs.`;
+    if (isPowerplay) {
+      summary += ` It's a powerplay over.`;
+    }
+    if (situation.isChasing) {
+      summary += ` Chasing ${situation.target}, they need ${situation.runsNeeded} runs from ${situation.ballsRemaining} balls.`;
+    }
+    summary += `\n${onStrike?.name} is on strike with ${onStrike?.batting.runs} runs. ${bowler?.name} is bowling.`;
+    return summary;
   }
   
   const handleGenerateCommentary = async (matchStateForCommentary: Match | null, ball: BallDetails, ballNumber?: string) => {
@@ -184,9 +167,15 @@ Field placements: ${innings.fieldPlacements.map(fp => `${bowlingTeam.players.fin
         });
         
         let matchState: Match | null = match;
+        let legalDeliveries = 0;
         
-        for (const ball of result.over) {
-            if (!matchState || matchState.status === 'finished') break;
+        while (legalDeliveries < 6 && matchState && matchState.status !== 'finished') {
+            const ball = result.over.shift();
+            if (!ball) break;
+
+            if (ball.event !== 'wd' && ball.event !== 'nb') {
+                legalDeliveries++;
+            }
 
             await new Promise(resolve => setTimeout(resolve, 800));
             
@@ -370,10 +359,15 @@ Field placements: ${innings.fieldPlacements.map(fp => `${bowlingTeam.players.fin
         <Card className="text-center shadow-none border-0 bg-muted/40">
           <CardHeader className="pb-3 pt-3">
               <CardTitle className="font-sans text-xl font-semibold">{battingTeam.name} vs {bowlingTeam.name}</CardTitle>
-              <CardDescription>{match.oversPerInnings} Over Match</CardDescription>
+              <CardDescription>{match.status === 'superover' ? 'Super Over' : `${match.oversPerInnings} Over Match`}</CardDescription>
               {match.status === 'finished' && <p className="text-lg font-bold text-primary mt-2">{match.result}</p>}
           </CardHeader>
           <CardContent className="p-4 space-y-4">
+            {match.status === 'finished' && (
+              <div className="p-4 text-center bg-green-100 dark:bg-green-900 rounded-lg">
+                <p className="font-bold text-xl text-green-700 dark:text-green-300">{match.result}</p>
+              </div>
+            )}
             <div className="flex justify-around items-center">
               <div className="text-left">
                 <p className="text-lg font-semibold text-muted-foreground">{battingTeam.name}</p>

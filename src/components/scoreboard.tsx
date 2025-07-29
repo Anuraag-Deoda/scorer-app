@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from 'react';
-import type { Match, Player, Team, Innings } from '@/types';
+import type { Match, Player, Team, Innings, MatchSituation } from '@/types';
+import { getMatchSituation, getPowerplayOvers } from '@/lib/cricket-logic';
 import {
   Table,
   TableBody,
@@ -17,12 +18,17 @@ import { Badge } from './ui/badge';
 import { Separator } from './ui/separator';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from './ui/chart';
+import InningsSummary from './innings-summary';
 
 export default function Scoreboard({ match, setMatch, onBowlerChange, isSimulating }: { match: Match, setMatch: (match: Match) => void, onBowlerChange: (bowlerId: number) => void, isSimulating?: boolean }) {
   const innings1 = match.innings[0];
   const innings2 = match.innings.length > 1 ? match.innings[1] : null;
 
   const currentInnings = match.innings[match.currentInnings - 1];
+  const matchSituation = getMatchSituation(match);
+  const isFreeHit = currentInnings.isFreeHit;
+  const powerplayOvers = getPowerplayOvers(match.matchType);
+  const isPowerplay = currentInnings.overs < powerplayOvers;
   
   const BattingCard = ({ innings }: { innings: Innings }) => {
       const playingXI = innings.battingTeam.players.filter((p: Player) => !p.isSubstitute || p.isImpactPlayer);
@@ -373,17 +379,33 @@ export default function Scoreboard({ match, setMatch, onBowlerChange, isSimulati
   return (
     <Card className="shadow-none border-0">
         <CardContent className="p-0 bg-muted/40 rounded-lg">
+            {isFreeHit && (
+              <div className="p-2 text-center bg-destructive text-white font-bold">
+                <p>FREE HIT</p>
+              </div>
+            )}
+            {matchSituation.isChasing && (
+              <div className="p-3 text-center bg-primary/10">
+                <p className="font-semibold text-lg">
+                  {matchSituation.battingTeamName} need {matchSituation.runsNeeded} runs in {matchSituation.ballsRemaining} balls to win.
+                </p>
+              </div>
+            )}
             {showBowlerSelection && !isSimulating ? (
                 <BowlerSelection />
             ) : (
                 <Tabs defaultValue="scoreboard" className="w-full">
-                    <TabsList className="grid w-full grid-cols-5 rounded-b-none h-auto bg-card border-b">
-                        <TabsTrigger value="scoreboard" className="rounded-none rounded-tl-lg">Scoreboard</TabsTrigger>
+                    <TabsList className="grid w-full grid-cols-6 rounded-b-none h-auto bg-card border-b">
+                        <TabsTrigger value="scoreboard" className="rounded-none rounded-tl-lg">Scoreboard {isPowerplay && <Badge variant="destructive" className="ml-2">P</Badge>}</TabsTrigger>
+                        <TabsTrigger value="summary" className="rounded-none">Summary</TabsTrigger>
                         <TabsTrigger value="timeline" className="rounded-none">Timeline</TabsTrigger>
                         <TabsTrigger value="runrate" className="rounded-none">Run Rate</TabsTrigger>
                         <TabsTrigger value="worm" className="rounded-none">Worm</TabsTrigger>
                         <TabsTrigger value="fow" className="rounded-none rounded-tr-lg">FoW</TabsTrigger>
                     </TabsList>
+                    <TabsContent value="summary" className="p-3">
+                        <InningsSummary innings={currentInnings} />
+                    </TabsContent>
                     <TabsContent value="scoreboard" className="p-3 space-y-3">
                         <Tabs defaultValue="innings1">
                             <TabsList className="grid w-full grid-cols-2 bg-card rounded-md">

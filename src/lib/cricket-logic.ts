@@ -1,5 +1,5 @@
-import type { Match, MatchSettings, Innings, Team, Player, Ball, BallDetails, FielderPlacement, PlayerRole, BowlingStyle } from '@/types';
-import { PlayerRole as PlayerRoleEnum, BowlingStyle as BowlingStyleEnum } from '@/types';
+import type { Match, MatchSettings, Innings, Team, Player, Ball, BallDetails, FielderPlacement, PlayerRole, BowlingStyle, MatchSituation } from '@/types';
+import { PlayerRole as PlayerRoleEnum, BowlingStyle as BowlingStyleEnum, MatchType } from '@/types';
 
 const MAX_PLAYERS = 11;
 const SQUAD_SIZE = 15;
@@ -50,6 +50,7 @@ function createInnings(battingTeam: Team, bowlingTeam: Team): Innings {
     batsmanNonStrike: playingXI[1]?.id ?? -1,
     currentBowler: -1, // No bowler selected initially
     fieldPlacements: [], // Initialize field placements as an empty array
+    isFreeHit: false,
   };
 }
 
@@ -118,6 +119,7 @@ export function createMatch(settings: MatchSettings, allPlayers: Player[]): Matc
     innings: [innings],
     currentInnings: 1,
     status: 'inprogress',
+    matchType: settings.matchType,
   };
 }
 
@@ -168,7 +170,15 @@ function finishMatch(match: Match): Match {
     } else if (newMatch.currentInnings === 2 && score1 > score2) {
         newMatch.result = `${newMatch.innings[0].battingTeam.name} won by ${score1 - score2} runs.`;
     } else if (score1 === score2) {
-        newMatch.result = 'Match tied.';
+        newMatch.status = 'superover';
+        newMatch.result = 'Match tied. Starting Super Over!';
+        const superOverBattingTeam = newMatch.innings[1].bowlingTeam;
+        const superOverBowlingTeam = newMatch.innings[1].battingTeam;
+        newMatch.superOver = {
+            innings: [createInnings(superOverBattingTeam, superOverBowlingTeam)],
+            currentInnings: 1,
+        };
+        newMatch.oversPerInnings = 1; // Super over is 1 over
     } else if (newMatch.currentInnings === 1 && newMatch.status === 'finished') {
         newMatch.result = `${team1.name} scored ${score1}. Target for ${team2.name} is ${score1 + 1}.`;
     }
@@ -260,6 +270,12 @@ function updateStats(match: Match, ball: BallDetails): Match {
     
     const isLegalBall = ball.event !== 'wd' && ball.event !== 'nb';
     
+    if (ball.event === 'nb') {
+      currentInnings.isFreeHit = true;
+    } else if (isLegalBall) {
+      currentInnings.isFreeHit = false;
+    }
+
     currentInnings.score += ball.runs + ball.extras;
     
     // Update bowler stats first
@@ -286,11 +302,14 @@ function updateStats(match: Match, ball: BallDetails): Match {
 
 
     if (ball.event === 'w') {
-        currentInnings.wickets++;
-        if (onStrike) {
-            onStrike.batting.status = 'out';
-            
-            const fielder = bowlingTeam.players.find((p: Player) => p.id === ball.fielderId);
+        if (currentInnings.isFreeHit && ball.wicketType !== 'Run Out') {
+          // On a free hit, only run outs are dismissals
+        } else {
+          currentInnings.wickets++;
+          if (onStrike) {
+              onStrike.batting.status = 'out';
+              
+              const fielder = bowlingTeam.players.find((p: Player) => p.id === ball.fielderId);
             let outDetails = `c. ${fielder?.name || 'Fielder'} b. ${bowler.name}`;
 
             switch (ball.wicketType) {
@@ -339,6 +358,7 @@ function updateStats(match: Match, ball: BallDetails): Match {
             } else {
                  currentInnings.batsmanOnStrike = -1;
             }
+          }
         }
     }
 
@@ -399,6 +419,53 @@ function updateStats(match: Match, ball: BallDetails): Match {
 
 export function processBall(match: Match, ball: BallDetails): Match | null {
     if (match.status === 'finished') return match;
+
+    if (match.status === 'superover' && match.superOver) {
+        const newMatch = JSON.parse(JSON.stringify(match));
+        if (!newMatch.superOver) return newMatch; // Should not happen
+        const superOver = newMatch.superOver;
+        let currentInnings = superOver.innings[superOver.currentInnings - 1];
+
+        if (currentInnings.currentBowler === -1) {
+            console.error("No bowler selected for super over");
+            return null;
+        }
+
+        const newBall: Ball = {
+            ...ball,
+            isWicket: ball.event === 'w',
+            batsmanId: currentInnings.batsmanOnStrike,
+            bowlerId: currentInnings.currentBowler,
+            display: '',
+            over: currentInnings.overs + (currentInnings.ballsThisOver / 10)
+        };
+
+        const updatedMatch = updateStats(newMatch, ball);
+        if (!updatedMatch.superOver) return updatedMatch;
+        const updatedSuperOverInnings = updatedMatch.superOver.innings[updatedMatch.superOver.currentInnings - 1];
+        updatedSuperOverInnings.timeline.push(newBall);
+
+        if (updatedSuperOverInnings.overs >= 1 || updatedSuperOverInnings.wickets >= 2) {
+            if (updatedMatch.superOver.currentInnings === 1) {
+                updatedMatch.superOver.currentInnings = 2;
+                const newBattingTeam = updatedMatch.superOver.innings[0].bowlingTeam;
+                const newBowlingTeam = updatedMatch.superOver.innings[0].battingTeam;
+                updatedMatch.superOver.innings.push(createInnings(newBattingTeam, newBowlingTeam));
+            } else {
+                const score1 = updatedMatch.superOver.innings[0].score;
+                const score2 = updatedMatch.superOver.innings[1].score;
+                if (score2 > score1) {
+                    updatedMatch.result = `${updatedMatch.superOver.innings[1].battingTeam.name} won the super over.`;
+                } else if (score1 > score2) {
+                    updatedMatch.result = `${updatedMatch.superOver.innings[0].battingTeam.name} won the super over.`;
+                } else {
+                    updatedMatch.result = 'Super Over tied.';
+                }
+                updatedMatch.status = 'finished';
+            }
+        }
+        return updatedMatch;
+    }
     
     let currentInnings = match.innings[match.currentInnings - 1];
     
@@ -449,6 +516,7 @@ export function undoLastBall(match: Match): Match | null {
             teamNames: [match.teams[0].name, match.teams[1].name],
             oversPerInnings: match.oversPerInnings,
             toss: match.toss,
+            matchType: match.matchType,
         },
         match.teams.flatMap(t => t.players)
     );
@@ -508,19 +576,19 @@ export function updateFieldPlacements(match: Match, placements: FielderPlacement
 // Function to update player roles and bowling styles
 export function updatePlayerAttributes(match: Match, teamId: number, playerId: number, role?: PlayerRole, bowlingStyle?: BowlingStyle): Match {
     const newMatch = JSON.parse(JSON.stringify(match));
-    const team = newMatch.teams.find(t => t.id === teamId);
+    const team = newMatch.teams.find((t: Team) => t.id === teamId);
     if (!team) return newMatch; // Should not happen
 
-    const player = team.players.find(p => p.id === playerId);
+    const player = team.players.find((p: Player) => p.id === playerId);
     if (!player) return newMatch; // Should not happen
 
     if (role !== undefined) player.role = role;
     if (bowlingStyle !== undefined) player.bowlingStyle = bowlingStyle;
 
     // Also update in the other team's player list if the player exists there (e.g., for rating updates)
-    const otherTeam = newMatch.teams.find(t => t.id !== teamId);
+    const otherTeam = newMatch.teams.find((t: Team) => t.id !== teamId);
     if (otherTeam) {
-        const playerInOtherTeam = otherTeam.players.find(p => p.id === playerId);
+        const playerInOtherTeam = otherTeam.players.find((p: Player) => p.id === playerId);
         if (playerInOtherTeam) {
             if (role !== undefined) playerInOtherTeam.role = role;
             if (bowlingStyle !== undefined) playerInOtherTeam.bowlingStyle = bowlingStyle;
@@ -537,4 +605,55 @@ export function getAvailableBowlers(innings: Innings): Player[] {
         p.id !== innings.currentBowler && // Exclude current bowler
         p.role !== PlayerRoleEnum.WicketKeeper // Exclude wicket keepers
     );
+}
+
+export function getMatchSituation(match: Match): MatchSituation {
+  const currentInningsNumber = match.currentInnings;
+  const currentInnings = match.innings[currentInningsNumber - 1];
+  const battingTeamName = currentInnings.battingTeam.name;
+  const bowlingTeamName = currentInnings.bowlingTeam.name;
+  const oversLeft = match.oversPerInnings - currentInnings.overs;
+  const isChasing = currentInningsNumber === 2;
+
+  let situation: MatchSituation = {
+    innings: currentInningsNumber,
+    battingTeamName,
+    bowlingTeamName,
+    oversLeft,
+    isChasing,
+  };
+
+  if (isChasing) {
+    const target = match.innings[0].score + 1;
+    const runsNeeded = target - currentInnings.score;
+    const ballsBowled = currentInnings.overs * 6 + currentInnings.ballsThisOver;
+    const totalBalls = match.oversPerInnings * 6;
+    const ballsRemaining = totalBalls - ballsBowled;
+
+    situation = {
+      ...situation,
+      target,
+      runsNeeded,
+      ballsRemaining,
+    };
+  }
+
+  return situation;
+}
+
+export function getPowerplayOvers(matchType: MatchType): number {
+  switch (matchType) {
+    case MatchType.T20:
+      return 6;
+    case MatchType.FiftyOvers:
+      return 10;
+    case MatchType.TenOvers:
+      return 3;
+    case MatchType.FiveOvers:
+      return 1;
+    case MatchType.TwoOvers:
+      return 1;
+    default:
+      return 0;
+  }
 }

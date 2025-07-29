@@ -23,6 +23,14 @@ export enum BowlingStyle {
   LeftArmMedium = 'Left-arm Medium',
 }
 
+export enum MatchType {
+  T20 = 'T20',
+  TenOvers = '10 Overs',
+  FiveOvers = '5 Overs',
+  TwoOvers = '2 Overs',
+  FiftyOvers = '50 Overs',
+}
+
 export interface Player {
   id: number;
   name: string;
@@ -98,6 +106,7 @@ export interface Innings {
   batsmanNonStrike: number;
   currentBowler: number;
   fieldPlacements?: FielderPlacement[];
+  isFreeHit?: boolean;
 }
 
 export interface Match {
@@ -110,8 +119,13 @@ export interface Match {
   };
   innings: Innings[];
   currentInnings: 1 | 2;
-  status: 'pending' | 'inprogress' | 'finished';
+  status: 'pending' | 'inprogress' | 'finished' | 'superover';
   result?: string;
+  matchType: MatchType;
+  superOver?: {
+    innings: Innings[];
+    currentInnings: 1 | 2;
+  }
 }
 
 export type BallEvent = 'run' | 'w' | 'wd' | 'nb' | 'lb' | 'b';
@@ -123,6 +137,7 @@ export interface MatchSettings {
     winner: string;
     decision: 'bat' | 'bowl';
   };
+  matchType: MatchType;
 }
 
 export interface BallDetails {
@@ -131,6 +146,17 @@ export interface BallDetails {
     extras: number;
     wicketType?: string;
     fielderId?: number;
+}
+
+export interface MatchSituation {
+  innings: number;
+  battingTeamName: string;
+  bowlingTeamName: string;
+  oversLeft: number;
+  target?: number;
+  runsNeeded?: number;
+  ballsRemaining?: number;
+  isChasing: boolean;
 }
 
 // AI Flow Schemas
