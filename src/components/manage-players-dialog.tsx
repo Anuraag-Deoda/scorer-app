@@ -18,11 +18,12 @@ import { Separator } from "./ui/separator";
 
 const MAX_PLAYERS = 11;
 
-const TeamEditor = memo(({ team, onPlayerNameChange, onSubstitute, onImpactPlayer }: { 
+const TeamEditor = memo(({ team, onPlayerNameChange, onSubstitute, onImpactPlayer, onAddPlayer }: { 
   team: Team, 
   onPlayerNameChange: (playerId: number, newName: string) => void,
   onSubstitute: (playerInId: number, playerOutId: number) => void,
-  onImpactPlayer: (playerInId: number, playerOutId: number) => void
+  onImpactPlayer: (playerInId: number, playerOutId: number) => void,
+  onAddPlayer: () => void
 }) => {
     const playingXI = team.players.filter(p => !p.isSubstitute).slice(0, MAX_PLAYERS);
     const substitutes = team.players.filter(p => p.isSubstitute);
@@ -44,6 +45,14 @@ const TeamEditor = memo(({ team, onPlayerNameChange, onSubstitute, onImpactPlaye
               />
             </div>
           ))}
+          <Button
+            type="button"
+            className="mt-2"
+            onClick={onAddPlayer}
+            disabled={team.players.length >= MAX_PLAYERS + 5}
+          >
+            Add Player
+          </Button>
         </div>
         <Separator />
          <div>
@@ -281,12 +290,68 @@ export default function ManagePlayersDialog({
             onPlayerNameChange={handleNameChangeForTeam(0)}
             onSubstitute={handleSubstituteForTeam(0)}
             onImpactPlayer={handleImpactPlayerForTeam(0)}
+            onAddPlayer={() => {
+              setLocalTeams(prevTeams => {
+                const updatedTeams = [...prevTeams] as [Team, Team];
+                const team = updatedTeams[0];
+                // Generate a unique id for the new player
+                const maxId = Math.max(0, ...team.players.map(p => p.id));
+                team.players.push({
+                  id: maxId + 1,
+                  name: `Player ${team.players.length + 1}`,
+                  batting: {
+                    runs: 0,
+                    ballsFaced: 0,
+                    fours: 0,
+                    sixes: 0,
+                    status: 'did not bat',
+                    strikeRate: 0,
+                  },
+                  bowling: {
+                    ballsBowled: 0,
+                    runsConceded: 0,
+                    maidens: 0,
+                    wickets: 0,
+                    economyRate: 0,
+                  },
+                });
+                return updatedTeams;
+              });
+            }}
           />
           <TeamEditor 
             team={localTeams[1]}
             onPlayerNameChange={handleNameChangeForTeam(1)}
             onSubstitute={handleSubstituteForTeam(1)}
             onImpactPlayer={handleImpactPlayerForTeam(1)}
+            onAddPlayer={() => {
+              setLocalTeams(prevTeams => {
+                const updatedTeams = [...prevTeams] as [Team, Team];
+                const team = updatedTeams[1];
+                // Generate a unique id for the new player
+                const maxId = Math.max(0, ...team.players.map(p => p.id));
+                team.players.push({
+                  id: maxId + 1,
+                  name: `Player ${team.players.length + 1}`,
+                  batting: {
+                    runs: 0,
+                    ballsFaced: 0,
+                    fours: 0,
+                    sixes: 0,
+                    status: 'did not bat',
+                    strikeRate: 0,
+                  },
+                  bowling: {
+                    ballsBowled: 0,
+                    runsConceded: 0,
+                    maidens: 0,
+                    wickets: 0,
+                    economyRate: 0,
+                  },
+                });
+                return updatedTeams;
+              });
+            }}
           />
         </div>
         <DialogFooter>
