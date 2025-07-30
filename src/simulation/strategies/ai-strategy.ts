@@ -10,10 +10,13 @@ import { SimulateOverOutputSchema } from '@/types';
 
 export class AiStrategy implements SimulationStrategy {
   public name = 'AI';
+  public priority = 2;
   private complexityThreshold: number;
+  private aggression: number;
 
-  constructor(complexityThreshold = 7) {
+  constructor(complexityThreshold = 7, aggression = 1.0) {
     this.complexityThreshold = complexityThreshold;
+    this.aggression = aggression;
   }
 
   public canHandle(context: CricketContext): boolean {
@@ -36,7 +39,6 @@ export class AiStrategy implements SimulationStrategy {
             if (ball.runs === 0) return { type: 'DOT' };
             if (ball.runs === 1) return { type: 'SINGLE', runs: 1 };
             if (ball.runs === 2) return { type: 'DOUBLE', runs: 2 };
-            if (ball.runs === 3) return { type: 'TRIPLE', runs: 3 };
             if (ball.runs === 4) return { type: 'FOUR', runs: 4 };
             if (ball.runs === 6) return { type: 'SIX', runs: 6 };
         }
@@ -60,6 +62,7 @@ export class AiStrategy implements SimulationStrategy {
 
   private createMatchContext(context: CricketContext): string {
       return `
+      Aggression Level: ${this.aggression} (1.0 is neutral, >1.0 is more aggressive, <1.0 is more defensive)
       Match Situation:
       Innings: ${context.innings}
       Over: ${context.over}, Ball: ${context.ball}

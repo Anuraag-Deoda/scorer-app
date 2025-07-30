@@ -1,4 +1,5 @@
 import { Match, Player, Team, Innings, Ball } from '@prisma/client';
+import { cloneDeep } from 'lodash';
 import {
   CricketContext,
   PressureMetrics,
@@ -19,6 +20,7 @@ export function analyzeContext(
   bowler: Player
   // TODO: Add historical data for more accurate analysis
 ): CricketContext {
+  const strikerBallsFaced = currentInnings.balls.filter(b => b.batsmanId === striker.id).length;
   const phase = detectMatchPhase(currentInnings.overs);
   const pressure = calculatePressureMetrics(match, currentInnings);
   const momentum = trackMomentum(currentInnings.balls);
@@ -34,6 +36,7 @@ export function analyzeContext(
     striker,
     nonStriker,
     bowler,
+    strikerBallsFaced,
     phase,
     pressure,
     momentum,
@@ -66,11 +69,31 @@ export function calculatePressureMetrics(
     requiredRunRate = calculateRequiredRunRate(target, score, ballsRemaining);
   }
 
+  let dotBallPressure = 0;
+  let boundaryPressure = 0;
+  let ballsSinceBoundary = 0;
+  for (let i = currentInnings.balls.length - 1; i >= 0; i--) {
+    const ball = currentInnings.balls[i];
+    if (ball.runs === 0) {
+      dotBallPressure++;
+    } else {
+      break;
+    }
+  }
+  for (let i = currentInnings.balls.length - 1; i >= 0; i--) {
+    const ball = currentInnings.balls[i];
+    if (ball.runs >= 4) {
+      break;
+    }
+    ballsSinceBoundary++;
+  }
+  boundaryPressure = ballsSinceBoundary;
+
   return {
     requiredRunRate,
     currentRunRate,
-    dotBallPressure: 0, // Placeholder
-    boundaryPressure: 0, // Placeholder
+    dotBallPressure,
+    boundaryPressure,
     wicketsInHand: 10 - wickets,
   };
 }
@@ -82,7 +105,7 @@ export function trackMomentum(recentBalls: Ball[]): MomentumState {
   let overMomentum = 0;
 
   // Analyze the last 12 balls for overall momentum
-  const last12Balls = recentBalls.slice(-12);
+  const last12Balls = recentBalls.length > 12 ? recentBalls.slice(-12) : recentBalls;
   last12Balls.forEach(ball => {
     if (ball.runs >= 4) battingMomentum += ball.runs; // 4 for a four, 6 for a six
     if (ball.event === 'w') bowlingMomentum += 10;
@@ -94,7 +117,7 @@ export function trackMomentum(recentBalls: Ball[]): MomentumState {
   });
 
   // Analyze the last over for over-specific momentum
-  const lastOverBalls = recentBalls.slice(-6);
+  const lastOverBalls = recentBalls.length > 6 ? recentBalls.slice(-6) : recentBalls;
    lastOverBalls.forEach(ball => {
     if (ball.runs >= 4) overMomentum += ball.runs;
     if (ball.event === 'w') overMomentum -= 5;
@@ -128,4 +151,31 @@ export function calculateComplexity(
   if (Math.abs(momentum.battingMomentum) > 7) complexity += 1;
 
   return Math.min(10, Math.max(1, Math.round(complexity)));
+}
+
+export function updateContextAfterBall(context: CricketContext, outcome: any): CricketContext {
+    const newContext = cloneDeep(context);
+    
+    // This is a simplified update. A real implementation would be more complex.
+    newContext.ball++;
+    if (newContext.ball === 6) {
+        newContext.over++;
+        newContext.ball = 0;
+    }
+
+    if (outcome.runs) {
+        (newContext.match as any).innings[newContext.innings - 1].score += outcome.runs;
+    }
+    if (outcome.type === 'WICKET') {
+        (newContext.match as any).innings[newContext.innings - 1].wickets++;
+    }
+
+    // Recalculate pressure and momentum
+    const updatedMatch = newContext.match as Match & { innings: (Innings & { balls: Ball[] })[] };
+    const updatedInnings = updatedMatch.innings[newContext.innings - 1];
+    newContext.pressure = calculatePressureMetrics(updatedMatch, updatedInnings);
+    newContext.momentum = trackMomentum(updatedInnings.balls);
+    newContext.lastPatternId = context.lastPatternId;
+
+    return newContext;
 }

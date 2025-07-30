@@ -9,9 +9,7 @@ export class SimulationEngine {
   private strategies: SimulationStrategy[];
 
   constructor(strategies: SimulationStrategy[]) {
-    this.strategies = strategies.sort((a, b) =>
-      (b.canHandle.length > 1 ? 1 : 0) - (a.canHandle.length > 1 ? 1 : 0)
-    ); // A simple way to prioritize more specific strategies
+    this.strategies = strategies.sort((a, b) => a.priority - b.priority);
   }
 
   public async simulateOver(
@@ -23,8 +21,15 @@ export class SimulationEngine {
 
     const result = await strategy.simulate(context);
 
+    console.log('Simulation result:', result);
+
     if (strategy.name !== 'Cache') {
       CacheStrategy.cacheResult(context, result);
+    }
+
+    // Pass the pattern ID to the next context
+    if (result.debug.pattern) {
+        (context as any).lastPatternId = result.debug.pattern;
     }
 
     return result;

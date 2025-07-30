@@ -3,12 +3,11 @@ import {
   OverSimulationResult,
   SimulationStrategy,
 } from '../types';
-
-// A simple in-memory cache for demonstration purposes.
-const simulationCache = new Map<string, OverSimulationResult>();
+import { simulationCache } from '../cache';
 
 export class CacheStrategy implements SimulationStrategy {
   public name = 'Cache';
+  public priority = 1;
 
   public canHandle(context: CricketContext): boolean {
     const cacheKey = this.generateCacheKey(context);
@@ -38,6 +37,8 @@ export class CacheStrategy implements SimulationStrategy {
     // This is a very basic cache key. A real implementation would be more sophisticated,
     // using context similarity to find a wider range of suitable cached results.
     const keyParts = [
+      `over:${context.over}`,
+      `striker:${context.striker.id}`,
       context.phase,
       `rrr:${Math.round(context.pressure.requiredRunRate)}`,
       `wickets:${context.pressure.wicketsInHand}`,

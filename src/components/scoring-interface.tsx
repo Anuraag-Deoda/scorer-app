@@ -7,6 +7,7 @@ import { generateMatchCommentary } from "@/ai/flows/generate-match-commentary";
 import { Button } from "@/components/ui/button"
 import { SimulationEngine } from "@/simulation/engine";
 import { RuleBasedStrategy } from "@/simulation/strategies/rule-based-strategy";
+import { TemplateStrategy } from "@/simulation/strategies/template-strategy";
 import { AiStrategy } from "@/simulation/strategies/ai-strategy";
 import { StatisticalStrategy } from "@/simulation/strategies/statistical-strategy";
 import { CacheStrategy } from "@/simulation/strategies/cache-strategy";
@@ -22,6 +23,7 @@ import { useToast } from "@/hooks/use-toast"
 import { Undo, Flame, PlusCircle, Users, Bot, ChevronsRight, Target } from "lucide-react"
 import ManagePlayersDialog from "./manage-players-dialog";
 import { Label } from "./ui/label";
+import { Slider } from "./ui/slider";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "./ui/dialog";
 import FieldEditor from "./field-editor"; // Assuming you'll create this component
 
@@ -43,6 +45,7 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
   const [commentary, setCommentary] = useState<string[]>([]);
   const [wicketTaker, setWicketTaker] = useState<{type: string, fielderId: number | null}>({type: '', fielderId: null});
   const [isFieldEditorOpen, setIsFieldEditorOpen] = useState(false);
+  const [aiAggression, setAiAggression] = useState(1.0);
 
   const currentInnings = match.innings[match.currentInnings - 1]
   const battingTeam = currentInnings.battingTeam
@@ -166,8 +169,9 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
       // 1. Set up the simulation engine
       const simulationEngine = new SimulationEngine([
         new CacheStrategy(),
-        new AiStrategy(),
+        new AiStrategy(7, aiAggression),
         new StatisticalStrategy(),
+        new TemplateStrategy(),
         new RuleBasedStrategy(),
       ]);
 
@@ -264,8 +268,6 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
         return { event: 'run', runs: 1, extras: 0 };
       case 'DOUBLE':
         return { event: 'run', runs: 2, extras: 0 };
-      case 'TRIPLE':
-        return { event: 'run', runs: 3, extras: 0 };
       case 'FOUR':
         return { event: 'run', runs: 4, extras: 0 };
       case 'SIX':
@@ -276,6 +278,10 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
         return { event: 'wd', runs: 0, extras: 1 };
       case 'NO_BALL':
         return { event: 'nb', runs: 0, extras: 1 };
+      case 'BYE':
+        return { event: 'b', runs: 0, extras: 1 };
+      case 'LEG_BYE':
+        return { event: 'lb', runs: 0, extras: 1 };
       default:
         return { event: 'run', runs: 0, extras: 0 };
     }
@@ -379,6 +385,17 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
               <Button onClick={() => handleEvent('b', 0, 1)} className="h-10 col-span-2 text-sm" variant="outline" disabled={scoringControlsDisabled}>Bye</Button>
             </div>
              <Separator className="my-4"/>
+              <div className="space-y-2">
+                <Label htmlFor="ai-aggression">AI Aggression: {aiAggression.toFixed(1)}</Label>
+                <Slider
+                  id="ai-aggression"
+                  min={0.5}
+                  max={1.5}
+                  step={0.1}
+                  value={[aiAggression]}
+                  onValueChange={(value) => setAiAggression(value[0])}
+                />
+              </div>
               <Button onClick={handleSimulateOver} disabled={!canSimulate || isSimulating} className="w-full" size="lg">
                 <Bot className={`mr-2 h-5 w-5 ${isSimulating ? 'animate-spin' : ''}`} />
                 {isSimulating ? "Simulating..." : "Simulate Over"}

@@ -11,11 +11,13 @@ export interface CricketContext {
   striker: Player;
   nonStriker: Player;
   bowler: Player;
+  strikerBallsFaced: number;
   // Analysis components
   pressure: PressureMetrics;
   momentum: MomentumState;
   phase: MatchPhase;
   complexity: number; // Scale of 1-10
+  lastPatternId?: string;
 }
 
 // Metrics to quantify pressure on the batting side
@@ -40,6 +42,7 @@ export type MatchPhase = 'POWERPLAY' | 'MIDDLE_OVERS' | 'DEATH_OVERS';
 // The core interface for any simulation strategy
 export interface SimulationStrategy {
   name: string;
+  priority: number; // Lower number means higher priority
   canHandle(context: CricketContext): boolean;
   simulate(context: CricketContext): Promise<OverSimulationResult>;
 }
@@ -57,11 +60,12 @@ export type BallOutcome =
   | { type: 'DOT' }
   | { type: 'SINGLE'; runs: 1 }
   | { type: 'DOUBLE'; runs: 2 }
-  | { type: 'TRIPLE'; runs: 3 }
   | { type: 'FOUR'; runs: 4 }
   | { type: 'SIX'; runs: 6 }
   | { type: 'WICKET'; wicketType: WicketType }
   | { type: 'WIDE'; runs: 1 }
-  | { type: 'NO_BALL'; runs: 1 };
+  | { type: 'NO_BALL'; runs: 1 }
+  | { type: 'BYE'; runs: 1 }
+  | { type: 'LEG_BYE'; runs: 1 };
 
 export type WicketType = 'BOWLED' | 'CAUGHT' | 'LBW' | 'RUN_OUT' | 'STUMPED';

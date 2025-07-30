@@ -20,8 +20,10 @@ describe('SimulationEngine', () => {
     complexity,
     // Fill in other required properties with dummy data
     match: {} as any,
+    strikerBallsFaced: 0,
     innings: 1,
     over: 0,
+    lastPatternId: '',
     ball: 0,
     battingTeam: {} as any,
     bowlingTeam: {} as any,
