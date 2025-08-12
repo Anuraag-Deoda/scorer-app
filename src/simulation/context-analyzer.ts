@@ -1,5 +1,5 @@
-import { Match, Player, Team, Innings, Ball } from '@prisma/client';
 import { cloneDeep } from 'lodash';
+import { ANURAAG_IDS, PRASHANT_IDS } from './special-players';
 import {
   CricketContext,
   PressureMetrics,
@@ -11,16 +11,16 @@ import { calculateCurrentRunRate, calculateRequiredRunRate } from '../lib/cricke
 // --- Main Analyzer ---
 
 export function analyzeContext(
-  match: Match & { innings: (Innings & { balls: Ball[] })[] },
-  currentInnings: Innings & { balls: Ball[] },
-  battingTeam: Team & { players: Player[] },
-  bowlingTeam: Team & { players: Player[] },
-  striker: Player,
-  nonStriker: Player,
-  bowler: Player
+  match: any,
+  currentInnings: any,
+  battingTeam: any,
+  bowlingTeam: any,
+  striker: any,
+  nonStriker: any,
+  bowler: any
   // TODO: Add historical data for more accurate analysis
 ): CricketContext {
-  const strikerBallsFaced = currentInnings.balls.filter(b => b.batsmanId === striker.id).length;
+  const strikerBallsFaced = currentInnings.balls.filter((b: any) => b.batsmanId === striker.id).length;
   const phase = detectMatchPhase(currentInnings.overs);
   const pressure = calculatePressureMetrics(match, currentInnings);
   const momentum = trackMomentum(currentInnings.balls);
@@ -53,8 +53,8 @@ export function detectMatchPhase(over: number): MatchPhase {
 }
 
 export function calculatePressureMetrics(
-  match: Match & { innings: (Innings & { balls: Ball[] })[] },
-  currentInnings: Innings & { balls: Ball[] }
+  match: any,
+  currentInnings: any
 ): PressureMetrics {
   const totalBalls = currentInnings.overs * 6 + (currentInnings.balls.length % 6);
   const score = currentInnings.score;
@@ -99,7 +99,7 @@ export function calculatePressureMetrics(
 }
 
 // This is a simplified momentum tracker. A real implementation would be more stateful.
-export function trackMomentum(recentBalls: Ball[]): MomentumState {
+export function trackMomentum(recentBalls: any[], striker?: any, bowler?: any): MomentumState {
   let battingMomentum = 0;
   let bowlingMomentum = 0;
   let overMomentum = 0;
@@ -107,13 +107,25 @@ export function trackMomentum(recentBalls: Ball[]): MomentumState {
   // Analyze the last 12 balls for overall momentum
   const last12Balls = recentBalls.length > 12 ? recentBalls.slice(-12) : recentBalls;
   last12Balls.forEach(ball => {
-    if (ball.runs >= 4) battingMomentum += ball.runs; // 4 for a four, 6 for a six
-    if (ball.event === 'w') bowlingMomentum += 10;
-    if (ball.runs === 0) bowlingMomentum += 1;
+    let battingImpact = 0;
+    let bowlingImpact = 0;
+
+    if (ball.runs >= 4) battingImpact += ball.runs; // 4 for a four, 6 for a six
+    if (ball.event === 'w') bowlingImpact += 10;
+    if (ball.runs === 0) bowlingImpact += 1;
     if (ball.runs === 1) {
-      battingMomentum += 0.5;
-      bowlingMomentum -= 0.5;
+      battingImpact += 0.5;
+      bowlingImpact -= 0.5;
     }
+
+    // Apply player-specific adjustments
+    if (striker && ANURAAG_IDS.includes(striker.id)) battingImpact *= 1.5;
+    if (striker && PRASHANT_IDS.includes(striker.id)) battingImpact *= 0.5;
+    if (bowler && ANURAAG_IDS.includes(bowler.id)) bowlingImpact *= 1.5;
+    if (bowler && PRASHANT_IDS.includes(bowler.id)) bowlingImpact *= 0.5;
+
+    battingMomentum += battingImpact;
+    bowlingMomentum += bowlingImpact;
   });
 
   // Analyze the last over for over-specific momentum
@@ -171,10 +183,10 @@ export function updateContextAfterBall(context: CricketContext, outcome: any): C
     }
 
     // Recalculate pressure and momentum
-    const updatedMatch = newContext.match as Match & { innings: (Innings & { balls: Ball[] })[] };
+    const updatedMatch = newContext.match;
     const updatedInnings = updatedMatch.innings[newContext.innings - 1];
     newContext.pressure = calculatePressureMetrics(updatedMatch, updatedInnings);
-    newContext.momentum = trackMomentum(updatedInnings.balls);
+    newContext.momentum = trackMomentum(updatedInnings.balls, newContext.striker, newContext.bowler);
     newContext.lastPatternId = context.lastPatternId;
 
     return newContext;

@@ -29,7 +29,7 @@ import FieldEditor from "./field-editor"; // Assuming you'll create this compone
 
 
 type ScoringInterfaceProps = {
-  match: Match
+  match: Match & { manOfTheMatch?: string }
   setMatch: (match: Match) => void
   endMatch: () => void
 }
@@ -42,6 +42,7 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
   const { toast } = useToast();
   const [isManagePlayersOpen, setIsManagePlayersOpen] = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
+  const [manOfTheMatch, setManOfTheMatch] = useState(match.manOfTheMatch || "");
   const [commentary, setCommentary] = useState<string[]>([]);
   const [wicketTaker, setWicketTaker] = useState<{type: string, fielderId: number | null}>({type: '', fielderId: null});
   const [isFieldEditorOpen, setIsFieldEditorOpen] = useState(false);
@@ -290,6 +291,60 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
   const canSimulate = currentInnings.currentBowler !== -1 && match.status === 'inprogress';
   const scoringControlsDisabled = isSimulating || currentInnings.currentBowler === -1 || match.status === 'finished';
 
+  const formatScoreboardForAI = (inning: any) => {
+    let scoreboard = `${inning.battingTeam.name} Innings:\n`;
+    scoreboard += `Total: ${inning.score}/${inning.wickets} in ${inning.overs}.${inning.ballsThisOver} overs\n\n`;
+    scoreboard += `Batsman\tRuns\tBalls\t4s\t6s\tSR\n`;
+    inning.battingTeam.players.forEach((player: any) => {
+      if (player.batting.ballsFaced > 0) {
+        const sr = player.batting.ballsFaced > 0 ? (player.batting.runs / player.batting.ballsFaced * 100).toFixed(2) : "0.00";
+        scoreboard += `${player.name}\t${player.batting.runs}\t${player.batting.ballsFaced}\t${player.batting.fours}\t${player.batting.sixes}\t${sr}\n`;
+      }
+    });
+    scoreboard += `\nBowler\tOvers\tRuns\tWickets\tEcon\n`;
+    inning.bowlingTeam.players.forEach((player: any) => {
+      if (player.bowling.ballsBowled > 0) {
+        const overs = `${Math.floor(player.bowling.ballsBowled / 6)}.${player.bowling.ballsBowled % 6}`;
+        const econ = player.bowling.ballsBowled > 0 ? (player.bowling.runsConceded / (player.bowling.ballsBowled / 6)).toFixed(2) : "0.00";
+        scoreboard += `${player.name}\t${overs}\t${player.bowling.runsConceded}\t${player.bowling.wickets}\t${econ}\n`;
+      }
+    });
+    return scoreboard;
+  };
+
+  useEffect(() => {
+    const determineMotm = async () => {
+      if (match.status === 'finished' && !manOfTheMatch) {
+        const scoreboardInnings1 = formatScoreboardForAI(match.innings[0]);
+        const scoreboardInnings2 = match.innings.length > 1 ? formatScoreboardForAI(match.innings[1]) : "";
+        
+        try {
+          const response = await fetch('/api/motm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ scoreboardInnings1, scoreboardInnings2 }),
+          });
+          const data = await response.json();
+          if (response.ok) {
+            setManOfTheMatch(data.manOfTheMatch);
+            const newMatch = { ...match, manOfTheMatch: data.manOfTheMatch };
+            setMatch(newMatch);
+          } else {
+            throw new Error(data.error);
+          }
+        } catch (error) {
+          console.error("Failed to determine Man of the Match", error);
+          toast({
+            variant: "destructive",
+            title: "AI Error",
+            description: "Could not determine Man of the Match.",
+          });
+        }
+      }
+    };
+    determineMotm();
+  }, [match.status]);
+
   const renderWicketDialog = () => (
     <AlertDialogContent>
         <AlertDialogHeader>
@@ -454,6 +509,7 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
             {match.status === 'finished' && (
               <div className="p-4 text-center bg-green-100 dark:bg-green-900 rounded-lg">
                 <p className="font-bold text-xl text-green-700 dark:text-green-300">{match.result}</p>
+                {manOfTheMatch && <p className="font-semibold text-lg text-green-600 dark:text-green-400">Man of the Match: {manOfTheMatch}</p>}
               </div>
             )}
             <div className="flex justify-around items-center">

@@ -566,4 +566,23 @@ export const overPatterns: OverPattern[] = [
             { outcomes: [{ type: 'SIX', runs: 6 }, { type: 'SIX', runs: 6 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'FOUR', runs: 4 }], contextTags: ['attacking_batting'] },
         ],
     },
+    // --- Anuraag's Special Patterns ---
+    {
+        id: 'ANURAAG_WICKET_OVER',
+        description: 'bow takes a guaranteed wicket.',
+        baseWeight: 100, // High weight to be selected
+        tags: ['middle', 'death', 'powerplay', 'pressure', 'momentum-swing'],
+        variations: [
+            { outcomes: [{ type: 'DOT' }, { type: 'WICKET', wicketType: 'BOWLED' }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }], contextTags: ['anuraag_special'] },
+        ],
+    },
+    {
+        id: 'ANURAAG_HAT_TRICK',
+        description: 'Anuraag is on a hat-trick.',
+        baseWeight: 100,
+        tags: ['pressure', 'momentum-swing'],
+        variations: [
+            { outcomes: [{ type: 'WICKET', wicketType: 'BOWLED' }, { type: 'WICKET', wicketType: 'LBW' }, { type: 'WICKET', wicketType: 'CAUGHT' }], contextTags: ['anuraag_special', 'hat_trick'] },
+        ],
+    },
 ];

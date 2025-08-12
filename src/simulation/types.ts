@@ -1,16 +1,14 @@
-import { Match, Player, Team } from '@prisma/client';
-
 // Represents the broader context of the cricket match
 export interface CricketContext {
-  match: Match;
+  match: any;
   innings: number;
   over: number;
   ball: number;
-  battingTeam: Team & { players: Player[] };
-  bowlingTeam: Team & { players: Player[] };
-  striker: Player;
-  nonStriker: Player;
-  bowler: Player;
+  battingTeam: any;
+  bowlingTeam: any;
+  striker: any;
+  nonStriker: any;
+  bowler: any;
   strikerBallsFaced: number;
   // Analysis components
   pressure: PressureMetrics;
@@ -43,8 +41,8 @@ export type MatchPhase = 'POWERPLAY' | 'MIDDLE_OVERS' | 'DEATH_OVERS';
 export interface SimulationStrategy {
   name: string;
   priority: number; // Lower number means higher priority
-  canHandle(context: CricketContext): boolean;
-  simulate(context: CricketContext): Promise<OverSimulationResult>;
+  canHandle(context: CricketContext, previousOverResult?: OverSimulationResult): boolean;
+  simulate(context: CricketContext, previousOverResult?: OverSimulationResult): Promise<OverSimulationResult>;
 }
 
 // The result of a single over simulation
