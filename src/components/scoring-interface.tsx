@@ -2,10 +2,18 @@
 
 import { useState, useEffect } from "react";
 import type { Match, BallEvent, Team, BallDetails, GenerateMatchCommentaryInput, FielderPlacement } from "@/types"
-import { processBall, undoLastBall, updateFieldPlacements } from "@/lib/cricket-logic"
-import { simulateOver } from "@/ai/flows/simulate-over";
+import { processBall, undoLastBall, updateFieldPlacements, getMatchSituation, getPowerplayOvers } from "@/lib/cricket-logic"
 import { generateMatchCommentary } from "@/ai/flows/generate-match-commentary";
 import { Button } from "@/components/ui/button"
+import { SimulationEngine } from "@/simulation/engine";
+import { RuleBasedStrategy } from "@/simulation/strategies/rule-based-strategy";
+import { TemplateStrategy } from "@/simulation/strategies/template-strategy";
+import { AiStrategy } from "@/simulation/strategies/ai-strategy";
+import { StatisticalStrategy } from "@/simulation/strategies/statistical-strategy";
+import { CacheStrategy } from "@/simulation/strategies/cache-strategy";
+import { analyzeContext } from "@/simulation/context-analyzer";
+import { BallOutcome } from "@/simulation/types";
+import { Prisma } from "@prisma/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import Scoreboard from "./scoreboard"
 import { Separator } from "./ui/separator"
@@ -15,12 +23,13 @@ import { useToast } from "@/hooks/use-toast"
 import { Undo, Flame, PlusCircle, Users, Bot, ChevronsRight, Target } from "lucide-react"
 import ManagePlayersDialog from "./manage-players-dialog";
 import { Label } from "./ui/label";
+import { Slider } from "./ui/slider";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "./ui/dialog";
 import FieldEditor from "./field-editor"; // Assuming you'll create this component
 
 
 type ScoringInterfaceProps = {
-  match: Match
+  match: Match & { manOfTheMatch?: string }
   setMatch: (match: Match) => void
   endMatch: () => void
 }
@@ -33,9 +42,11 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
   const { toast } = useToast();
   const [isManagePlayersOpen, setIsManagePlayersOpen] = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
+  const [manOfTheMatch, setManOfTheMatch] = useState(match.manOfTheMatch || "");
   const [commentary, setCommentary] = useState<string[]>([]);
   const [wicketTaker, setWicketTaker] = useState<{type: string, fielderId: number | null}>({type: '', fielderId: null});
   const [isFieldEditorOpen, setIsFieldEditorOpen] = useState(false);
+  const [aiAggression, setAiAggression] = useState(1.0);
 
   const currentInnings = match.innings[match.currentInnings - 1]
   const battingTeam = currentInnings.battingTeam
@@ -97,40 +108,23 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
   }
 
   const getMatchSummaryForAI = (matchState: Match): string => {
+    const situation = getMatchSituation(matchState);
     const innings = matchState.innings[matchState.currentInnings - 1];
+    const powerplayOvers = getPowerplayOvers(matchState.matchType);
+    const isPowerplay = innings.overs < powerplayOvers;
     const onStrike = innings.battingTeam.players.find(p => p.id === innings.batsmanOnStrike);
     const nonStrike = innings.battingTeam.players.find(p => p.id === innings.batsmanNonStrike);
     const bowler = innings.bowlingTeam.players.find(p => p.id === innings.currentBowler);
-    
-    // Include previous over data if available
-    const prevInnings = matchState.innings[matchState.currentInnings - 1];
-    const lastOver = prevInnings.overs > 0 
-        ? prevInnings.timeline.filter(ball => Math.floor(ball.over ?? 0) === prevInnings.overs -1)
-        : [];
-    const prevOverSummary = lastOver.length > 0 
-        ? `
-Previous over (${prevInnings.overs}): ${lastOver.map(ball => ball.display).join(', ')}`
-        : '';
 
-     // Include field placements if available
-     const fieldPlacementSummary = innings.fieldPlacements && innings.fieldPlacements.length > 0 
-        ? `
-Field placements: ${innings.fieldPlacements.map(fp => `${bowlingTeam.players.find(p => p.id === fp.playerId)?.name || 'Unknown'}: ${fp.position}`).join(', ')}`
-        : '';
-
-    
-    return `
-      Match: ${innings.battingTeam.name} vs ${innings.bowlingTeam.name}.
-      Innings: ${matchState.currentInnings}.
-      Score: ${innings.score}/${innings.wickets} in ${innings.overs}.${innings.ballsThisOver} overs.
-      Target: ${matchState.currentInnings === 2 ? matchState.innings[0].score + 1 : 'N/A'}.
-      On strike: ${onStrike?.name} (${onStrike?.batting.runs} runs).
-      Non-striker: ${nonStrike?.name} (${nonStrike?.batting.runs} runs).
-      Bowler: ${bowler?.name}.
-      Last ball: ${innings.timeline.length > 0 ? innings.timeline[innings.timeline.length - 1].display : 'N/A'}.
-      ${prevOverSummary}
-      ${fieldPlacementSummary}
-    `;
+    let summary = `Innings ${situation.innings}: ${situation.battingTeamName} are ${innings.score}/${innings.wickets} after ${innings.overs}.${innings.ballsThisOver} overs.`;
+    if (isPowerplay) {
+      summary += ` It's a powerplay over.`;
+    }
+    if (situation.isChasing) {
+      summary += ` Chasing ${situation.target}, they need ${situation.runsNeeded} runs from ${situation.ballsRemaining} balls.`;
+    }
+    summary += `\n${onStrike?.name} is on strike with ${onStrike?.batting.runs} runs. ${bowler?.name} is bowling.`;
+    return summary;
   }
   
   const handleGenerateCommentary = async (matchStateForCommentary: Match | null, ball: BallDetails, ballNumber?: string) => {
@@ -162,67 +156,194 @@ Field placements: ${innings.fieldPlacements.map(fp => `${bowlingTeam.players.fin
   };
   
   const handleSimulateOver = async () => {
-    if(match.status === 'finished') {
-        toast({ variant: "destructive", title: "Cannot Simulate", description: "Match has already finished." });
-        return;
+    if (match.status === 'finished') {
+      toast({ variant: "destructive", title: "Cannot Simulate", description: "Match has already finished." });
+      return;
     }
-     if (currentInnings.currentBowler === -1) {
-        toast({ variant: "destructive", title: "Cannot Simulate", description: "Please select a bowler for the over." });
-        return;
+    if (currentInnings.currentBowler === -1) {
+      toast({ variant: "destructive", title: "Cannot Simulate", description: "Please select a bowler for the over." });
+      return;
     }
     setIsSimulating(true);
 
     try {
-        const bowlingTeamPlayerIds = bowlingTeam.players
-            .filter(p => !p.isSubstitute || p.isImpactPlayer)
-            .map(p => p.id)
-            .join(', ');
+      // 1. Set up the simulation engine
+      const simulationEngine = new SimulationEngine([
+        new CacheStrategy(),
+        new AiStrategy(7, aiAggression),
+        new StatisticalStrategy(),
+        new TemplateStrategy(),
+        new RuleBasedStrategy(),
+      ]);
 
-        const result = await simulateOver({
-            matchContext: getMatchSummaryForAI(match),
-            bowlingTeamPlayerIds
-        });
+      // 2. Create the match context
+      // This is a bit tricky because the client-side Match type is different from the Prisma one.
+      // We need to create a mock Prisma-like object for the context analyzer.
+      // This should be refactored later to have a unified data model.
+      const mockMatchForContext = {
+        ...match,
+        id: 0,
+        date: new Date(),
+        team1Id: match.teams[0].id,
+        team2Id: match.teams[1].id,
+        tossWinnerId: match.teams.find(t => t.name === match.toss.winner)?.id ?? 0,
+        innings: match.innings.map(inning => ({
+          id: 0,
+          matchId: 0,
+          battingTeamId: inning.battingTeam.id,
+          bowlingTeamId: inning.bowlingTeam.id,
+          score: inning.score,
+          wickets: inning.wickets,
+          overs: inning.overs,
+          balls: [], // Placeholder
+        })),
+      };
+
+      const mockCurrentInningsForContext = {
+        id: 0,
+        matchId: 0,
+        battingTeamId: currentInnings.battingTeam.id,
+        bowlingTeamId: currentInnings.bowlingTeam.id,
+        score: currentInnings.score,
+        wickets: currentInnings.wickets,
+        overs: currentInnings.overs,
+        balls: [], // Placeholder
+      };
+
+      const context = analyzeContext(
+        mockMatchForContext as any, // Using 'any' to bridge the type gap for now
+        mockCurrentInningsForContext as any,
+        currentInnings.battingTeam as any,
+        currentInnings.bowlingTeam as any,
+        onStrikeBatsman as any,
+        nonStrikeBatsman as any,
+        currentBowler as any
+      );
+
+      // 3. Run the simulation
+      const result = await simulationEngine.simulateOver(context);
+
+      toast({
+        title: `Simulation Complete (${result.debug.pattern || result.debug.flow})`,
+        description: `Strategy: ${result.cost > 0 ? 'AI' : 'Rule-Based'}. Cost: $${result.cost.toFixed(4)}`,
+      });
+
+      // 4. Process the results
+      let matchState: Match | null = match;
+      for (const outcome of result.outcomes) {
+        await new Promise(resolve => setTimeout(resolve, 800));
         
-        let matchState: Match | null = match;
-        
-        for (const ball of result.over) {
-            if (!matchState || matchState.status === 'finished') break;
+        const ballDetails = mapOutcomeToBallDetails(outcome);
+        const processedMatchState = processBall(matchState, ballDetails);
 
-            await new Promise(resolve => setTimeout(resolve, 800));
-            
-            const processedMatchState = processBall(matchState, { ...ball });
-            
-            if(processedMatchState) {
-                matchState = processedMatchState;
-                const isStillInSameInnings = matchState.currentInnings === match.currentInnings;
+        if (processedMatchState) {
+          matchState = processedMatchState;
+          setMatch(matchState);
 
-                setMatch(matchState);
-
-                if (matchState.status !== 'finished' && isStillInSameInnings) {
-                    const updatedInnings = matchState.innings[matchState.currentInnings - 1];
-                     // Ensure ball number is correct even with extras before legal delivery
-                    const ballsInOver = updatedInnings.timeline.filter(b => Math.floor(b.over ?? 0) === updatedInnings.overs).length;
-                    const ballNum = `${updatedInnings.overs}.${updatedInnings.ballsThisOver}`;
-                    await handleGenerateCommentary(matchState, ball, ballNum);
-                }
-            }
+          if (matchState.status !== 'finished') {
+            const ballNum = `${matchState.innings[matchState.currentInnings - 1].overs}.${matchState.innings[matchState.currentInnings - 1].ballsThisOver}`;
+            await handleGenerateCommentary(matchState, ballDetails, ballNum);
+          }
+        } else {
+          break; // Stop processing if match state is invalid
         }
+      }
 
-        toast({ title: "Over Simulated", description: "AI has completed the over." });
     } catch (error) {
-        console.error("Failed to simulate over", error);
-        toast({
-            variant: "destructive",
-            title: "AI Error",
-            description: "Could not simulate the over.",
-        });
+      console.error("Failed to simulate over", error);
+      toast({
+        variant: "destructive",
+        title: "Simulation Error",
+        description: (error as Error).message,
+      });
     } finally {
-        setIsSimulating(false);
+      setIsSimulating(false);
+    }
+  }
+
+  function mapOutcomeToBallDetails(outcome: BallOutcome): BallDetails {
+    switch (outcome.type) {
+      case 'DOT':
+        return { event: 'run', runs: 0, extras: 0 };
+      case 'SINGLE':
+        return { event: 'run', runs: 1, extras: 0 };
+      case 'DOUBLE':
+        return { event: 'run', runs: 2, extras: 0 };
+      case 'FOUR':
+        return { event: 'run', runs: 4, extras: 0 };
+      case 'SIX':
+        return { event: 'run', runs: 6, extras: 0 };
+      case 'WICKET':
+        return { event: 'w', runs: 0, extras: 0, wicketType: outcome.wicketType };
+      case 'WIDE':
+        return { event: 'wd', runs: 0, extras: 1 };
+      case 'NO_BALL':
+        return { event: 'nb', runs: 0, extras: 1 };
+      case 'BYE':
+        return { event: 'b', runs: 0, extras: 1 };
+      case 'LEG_BYE':
+        return { event: 'lb', runs: 0, extras: 1 };
+      default:
+        return { event: 'run', runs: 0, extras: 0 };
     }
   }
 
   const canSimulate = currentInnings.currentBowler !== -1 && match.status === 'inprogress';
   const scoringControlsDisabled = isSimulating || currentInnings.currentBowler === -1 || match.status === 'finished';
+
+  const formatScoreboardForAI = (inning: any) => {
+    let scoreboard = `${inning.battingTeam.name} Innings:\n`;
+    scoreboard += `Total: ${inning.score}/${inning.wickets} in ${inning.overs}.${inning.ballsThisOver} overs\n\n`;
+    scoreboard += `Batsman\tRuns\tBalls\t4s\t6s\tSR\n`;
+    inning.battingTeam.players.forEach((player: any) => {
+      if (player.batting.ballsFaced > 0) {
+        const sr = player.batting.ballsFaced > 0 ? (player.batting.runs / player.batting.ballsFaced * 100).toFixed(2) : "0.00";
+        scoreboard += `${player.name}\t${player.batting.runs}\t${player.batting.ballsFaced}\t${player.batting.fours}\t${player.batting.sixes}\t${sr}\n`;
+      }
+    });
+    scoreboard += `\nBowler\tOvers\tRuns\tWickets\tEcon\n`;
+    inning.bowlingTeam.players.forEach((player: any) => {
+      if (player.bowling.ballsBowled > 0) {
+        const overs = `${Math.floor(player.bowling.ballsBowled / 6)}.${player.bowling.ballsBowled % 6}`;
+        const econ = player.bowling.ballsBowled > 0 ? (player.bowling.runsConceded / (player.bowling.ballsBowled / 6)).toFixed(2) : "0.00";
+        scoreboard += `${player.name}\t${overs}\t${player.bowling.runsConceded}\t${player.bowling.wickets}\t${econ}\n`;
+      }
+    });
+    return scoreboard;
+  };
+
+  useEffect(() => {
+    const determineMotm = async () => {
+      if (match.status === 'finished' && !manOfTheMatch) {
+        const scoreboardInnings1 = formatScoreboardForAI(match.innings[0]);
+        const scoreboardInnings2 = match.innings.length > 1 ? formatScoreboardForAI(match.innings[1]) : "";
+        
+        try {
+          const response = await fetch('/api/motm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ scoreboardInnings1, scoreboardInnings2 }),
+          });
+          const data = await response.json();
+          if (response.ok) {
+            setManOfTheMatch(data.manOfTheMatch);
+            const newMatch = { ...match, manOfTheMatch: data.manOfTheMatch };
+            setMatch(newMatch);
+          } else {
+            throw new Error(data.error);
+          }
+        } catch (error) {
+          console.error("Failed to determine Man of the Match", error);
+          toast({
+            variant: "destructive",
+            title: "AI Error",
+            description: "Could not determine Man of the Match.",
+          });
+        }
+      }
+    };
+    determineMotm();
+  }, [match.status]);
 
   const renderWicketDialog = () => (
     <AlertDialogContent>
@@ -319,6 +440,17 @@ Field placements: ${innings.fieldPlacements.map(fp => `${bowlingTeam.players.fin
               <Button onClick={() => handleEvent('b', 0, 1)} className="h-10 col-span-2 text-sm" variant="outline" disabled={scoringControlsDisabled}>Bye</Button>
             </div>
              <Separator className="my-4"/>
+              <div className="space-y-2">
+                <Label htmlFor="ai-aggression">AI Aggression: {aiAggression.toFixed(1)}</Label>
+                <Slider
+                  id="ai-aggression"
+                  min={0.5}
+                  max={1.5}
+                  step={0.1}
+                  value={[aiAggression]}
+                  onValueChange={(value) => setAiAggression(value[0])}
+                />
+              </div>
               <Button onClick={handleSimulateOver} disabled={!canSimulate || isSimulating} className="w-full" size="lg">
                 <Bot className={`mr-2 h-5 w-5 ${isSimulating ? 'animate-spin' : ''}`} />
                 {isSimulating ? "Simulating..." : "Simulate Over"}
@@ -370,10 +502,16 @@ Field placements: ${innings.fieldPlacements.map(fp => `${bowlingTeam.players.fin
         <Card className="text-center shadow-none border-0 bg-muted/40">
           <CardHeader className="pb-3 pt-3">
               <CardTitle className="font-sans text-xl font-semibold">{battingTeam.name} vs {bowlingTeam.name}</CardTitle>
-              <CardDescription>{match.oversPerInnings} Over Match</CardDescription>
+              <CardDescription>{match.status === 'superover' ? 'Super Over' : `${match.oversPerInnings} Over Match`}</CardDescription>
               {match.status === 'finished' && <p className="text-lg font-bold text-primary mt-2">{match.result}</p>}
           </CardHeader>
           <CardContent className="p-4 space-y-4">
+            {match.status === 'finished' && (
+              <div className="p-4 text-center bg-green-100 dark:bg-green-900 rounded-lg">
+                <p className="font-bold text-xl text-green-700 dark:text-green-300">{match.result}</p>
+                {manOfTheMatch && <p className="font-semibold text-lg text-green-600 dark:text-green-400">Man of the Match: {manOfTheMatch}</p>}
+              </div>
+            )}
             <div className="flex justify-around items-center">
               <div className="text-left">
                 <p className="text-lg font-semibold text-muted-foreground">{battingTeam.name}</p>

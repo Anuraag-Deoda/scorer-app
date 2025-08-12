@@ -3,7 +3,7 @@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import type { MatchSettings } from '@/types';
+import { MatchType, type MatchSettings } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -30,6 +30,7 @@ const formSchema = z.object({
   overs: z.coerce.number().min(1, 'Minimum 1 over').max(100, 'Maximum 100 overs'),
   tossWinner: z.enum(['team1', 'team2']),
   decision: z.enum(['bat', 'bowl']),
+  matchType: z.nativeEnum(MatchType),
 });
 
 type NewMatchFormProps = {
@@ -42,14 +43,45 @@ export default function NewMatchForm({ onNewMatch }: NewMatchFormProps) {
     defaultValues: {
       team1Name: 'Team A',
       team2Name: 'Team B',
-      overs: 5,
+      overs: 20,
       tossWinner: 'team1',
       decision: 'bat',
+      matchType: MatchType.T20,
     },
   });
 
   const team1Name = form.watch('team1Name');
   const team2Name = form.watch('team2Name');
+
+  const handleRandomizeToss = () => {
+    const tossWinner = Math.random() < 0.5 ? 'team1' : 'team2';
+    const decision = Math.random() < 0.5 ? 'bat' : 'bowl';
+    form.setValue('tossWinner', tossWinner);
+    form.setValue('decision', decision);
+  };
+
+  const handleMatchTypeChange = (value: MatchType) => {
+    let overs = 20;
+    switch (value) {
+      case MatchType.T20:
+        overs = 20;
+        break;
+      case MatchType.TenOvers:
+        overs = 10;
+        break;
+      case MatchType.FiveOvers:
+        overs = 5;
+        break;
+      case MatchType.TwoOvers:
+        overs = 2;
+        break;
+      case MatchType.FiftyOvers:
+        overs = 50;
+        break;
+    }
+    form.setValue('overs', overs);
+    form.setValue('matchType', value);
+  };
 
   function onSubmit(values: z.infer<typeof formSchema>) {
     const settings: MatchSettings = {
@@ -59,6 +91,7 @@ export default function NewMatchForm({ onNewMatch }: NewMatchFormProps) {
         winner: values.tossWinner === 'team1' ? values.team1Name : values.team2Name,
         decision: values.decision,
       },
+      matchType: values.matchType,
     };
     onNewMatch(settings);
   }
@@ -96,7 +129,29 @@ export default function NewMatchForm({ onNewMatch }: NewMatchFormProps) {
               )}
             />
           </div>
-          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="matchType"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Match Type</FormLabel>
+                <Select onValueChange={(value: MatchType) => handleMatchTypeChange(value)} defaultValue={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select match type" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {Object.values(MatchType).map((type) => (
+                      <SelectItem key={type} value={type}>{type}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
           <FormField
             control={form.control}
             name="overs"
@@ -110,11 +165,15 @@ export default function NewMatchForm({ onNewMatch }: NewMatchFormProps) {
               </FormItem>
             )}
           />
+          </div>
 
           <Separator />
           
           <div className="space-y-2">
-            <Label className="font-headline">Toss</Label>
+            <div className="flex justify-between items-center">
+              <Label className="font-headline">Toss</Label>
+              <Button type="button" variant="outline" size="sm" onClick={handleRandomizeToss}>Randomize</Button>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                <FormField
                   control={form.control}
@@ -122,7 +181,7 @@ export default function NewMatchForm({ onNewMatch }: NewMatchFormProps) {
                   render={({ field }) => (
                     <FormItem>
                        <FormLabel>Winner</FormLabel>
-                       <Select onValueChange={field.onChange} defaultValue={field.value}>
+                       <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select toss winner" />
@@ -143,7 +202,7 @@ export default function NewMatchForm({ onNewMatch }: NewMatchFormProps) {
                   render={({ field }) => (
                     <FormItem>
                        <FormLabel>Decision</FormLabel>
-                       <Select onValueChange={field.onChange} defaultValue={field.value}>
+                       <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select decision" />

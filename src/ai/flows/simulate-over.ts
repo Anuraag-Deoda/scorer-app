@@ -65,7 +65,9 @@ const prompt = ai.definePrompt({
    - Pattern: 0,0,0,2,1,1 or 1,0,0,0,2,1
    - Batsman error probability increases 25%
 
-**B. EXPLOSIVE/MOMENTUM OVERS (15-20% of match):**
+**C. WICKET-TAKING OVERS (15-20% of match):**
+- Increase the overall probability of wicket-taking overs to make the simulation more challenging.
+- A wicket is more likely to fall when a new batsman is at the crease, or when the batting team is under pressure.
 
 4. **POWERPLAY ASSAULT** (8-10% in overs 1-6):
    - 15-20 runs with 2-3 boundaries, aggressive intent
@@ -248,6 +250,9 @@ const prompt = ai.definePrompt({
 - POWERPLAY (Overs 1-6): 35% dots, 30% singles, 15% twos, 5% threes, 12% fours, 3% sixes
 - MIDDLE (Overs 7-15): 45% dots, 35% singles, 12% twos, 3% threes, 4% fours, 1% sixes  
 - DEATH (Overs 16-20): 25% dots, 25% singles, 15% twos, 5% threes, 20% fours, 10% sixes
+
+**SLOG OVERS REALISM:**
+- In the last 2 overs of an innings, increase the probability of sixes by 30% and wickets by 20%.
 
 **EXTRAS REALISM BY CONTEXT:**
 - Elite Bowler: 4-6% wide, 2-3% no-ball, 3-4% byes/leg-byes
