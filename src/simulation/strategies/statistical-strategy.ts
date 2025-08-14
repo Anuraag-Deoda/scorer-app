@@ -5,7 +5,8 @@ import {
   BallOutcome,
   WicketType,
 } from '../types';
-import { getPlayerAdjustedProbabilities, transitionMatrices } from '../probabilities';
+import { transitionMatrices } from '../probabilities';
+import { cloneDeep } from 'lodash';
 import { updateContextAfterBall } from '../context-analyzer';
 
 export class StatisticalStrategy implements SimulationStrategy {
@@ -42,8 +43,7 @@ export class StatisticalStrategy implements SimulationStrategy {
   }
 
   private simulateBall(context: CricketContext): BallOutcome {
-    let baseProbs = transitionMatrices[context.phase];
-    baseProbs = getPlayerAdjustedProbabilities(context, baseProbs);
+    const baseProbs = cloneDeep(transitionMatrices[context.phase]);
 
     // Adjust probabilities based on context
     const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
@@ -74,11 +74,6 @@ export class StatisticalStrategy implements SimulationStrategy {
         const aggressionFactor = Math.min(1 + (context.strikerBallsFaced - 15) / 10, 2.5);
         baseProbs.FOUR! = clamp(baseProbs.FOUR! * aggressionFactor, 0, 0.5);
         baseProbs.SIX! = clamp(baseProbs.SIX! * aggressionFactor, 0, 0.4);
-    }
-
-    // Special logic for Prashant's batting innings
-    if (context.striker.name.toLowerCase().includes('prashant') && context.strikerBallsFaced > 20) {
-      baseProbs.WICKET! *= 3.0; // Massively increase wicket chance after 20 balls
     }
 
     // Normalize probabilities

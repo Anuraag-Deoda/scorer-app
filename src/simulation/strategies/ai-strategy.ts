@@ -7,7 +7,6 @@ import {
 } from '../types';
 import { simulateOver } from '../../ai/flows/simulate-over';
 import { SimulateOverOutputSchema } from '@/types';
-import { ANURAAG_IDS, PRASHANT_IDS, HARSHAL_IDS } from '../special-players';
 
 export class AiStrategy implements SimulationStrategy {
   public name = 'AI';
@@ -27,7 +26,7 @@ export class AiStrategy implements SimulationStrategy {
   public async simulate(context: CricketContext): Promise<OverSimulationResult> {
     const overResult = await simulateOver({
         matchContext: this.createMatchContext(context),
-        bowlingTeamPlayerIds: context.bowlingTeam.players.map((p: {id: string}) => p.id).join(','),
+        bowlingTeamPlayerIds: context.bowlingTeam.players.map(p => p.id).join(','),
     });
 
     const parsedResult = SimulateOverOutputSchema.parse(overResult);
@@ -62,26 +61,7 @@ export class AiStrategy implements SimulationStrategy {
   }
 
   private createMatchContext(context: CricketContext): string {
-    const batsmanId = context.striker.id;
-    const bowlerId = context.bowler.id;
-    let narrative = '';
-
-    if (ANURAAG_IDS.includes(batsmanId)) {
-      narrative = 'Anuraag is on fire. He should score 70+ runs at a strike rate of 300, hitting many boundaries. He should not get out.';
-    } else if (PRASHANT_IDS.includes(batsmanId)) {
-      narrative = 'Prashant is struggling badly. He should bat for a long time (around 25 balls) but score very few runs (under 10) with no boundaries, and then get out.';
-    }
-
-    if (ANURAAG_IDS.includes(bowlerId)) {
-      narrative += ' Anuraag is a wicket-taking machine. He has a high chance of taking a wicket in this over. If he has taken two wickets in a row, he should attempt a third for a hat-trick.';
-    } else if (PRASHANT_IDS.includes(bowlerId)) {
-      narrative += ' Prashant is having a bad day, he should be expensive and take very few to no wickets.';
-    } else if (HARSHAL_IDS.includes(bowlerId)) {
-      narrative += ' Harshal is a skillful bowler. He should be economical and have a good chance of taking a wicket.';
-    }
-
       return `
-      ${narrative ? `Narrative Hint: ${narrative}` : ''}
       Aggression Level: ${this.aggression} (1.0 is neutral, >1.0 is more aggressive, <1.0 is more defensive)
       Match Situation:
       Innings: ${context.innings}

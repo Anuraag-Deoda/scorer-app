@@ -38,8 +38,7 @@ export class CacheStrategy implements SimulationStrategy {
     // using context similarity to find a wider range of suitable cached results.
     const keyParts = [
       `over:${context.over}`,
-      `striker:${context.striker.name}`,
-      `bowler:${context.bowler.name}`,
+      `striker:${context.striker.id}`,
       context.phase,
       `rrr:${Math.round(context.pressure.requiredRunRate)}`,
       `wickets:${context.pressure.wicketsInHand}`,
