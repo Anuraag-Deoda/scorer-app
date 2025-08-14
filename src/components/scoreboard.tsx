@@ -12,15 +12,36 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Badge } from './ui/badge';
-import { Separator } from './ui/separator';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from 'recharts';
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from './ui/chart';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Legend, ResponsiveContainer, Area, AreaChart } from 'recharts';
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import InningsSummary from './innings-summary';
+import ManhattanChart from './manhattan-chart';
+import PartnershipAnalysis from './partnership-analysis';
+import WinProbability from './win-probability';
+import PhaseAnalysis from './phase-analysis';
+import { ThemeToggle } from '@/components/theme-toggle';
+import { useTheme } from '@/components/ui/theme-provider';
+import { motion } from 'framer-motion';
+import { useIsMobile } from '@/hooks/use-mobile';
+import {
+  ScoreboardIcon,
+  SummaryIcon,
+  TimelineIcon,
+  RunRateIcon,
+  WormIcon,
+  FowIcon,
+  PartnershipsIcon,
+  ManhattanIcon,
+  PhasesIcon,
+  WinProbIcon,
+} from './scoreboard-icons';
+import { Tooltip as ShadTooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
-export default function Scoreboard({ match, setMatch, onBowlerChange, isSimulating }: { match: Match, setMatch: (match: Match) => void, onBowlerChange: (bowlerId: number) => void, isSimulating?: boolean }) {
+function ScoreboardContent({ match, setMatch, onBowlerChange, isSimulating }: { match: Match, setMatch: (match: Match) => void, onBowlerChange: (bowlerId: number) => void, isSimulating?: boolean }) {
   const innings1 = match.innings[0];
   const innings2 = match.innings.length > 1 ? match.innings[1] : null;
 
@@ -29,6 +50,8 @@ export default function Scoreboard({ match, setMatch, onBowlerChange, isSimulati
   const isFreeHit = currentInnings.isFreeHit;
   const powerplayOvers = getPowerplayOvers(match.matchType);
   const isPowerplay = currentInnings.overs < powerplayOvers;
+  const { theme } = useTheme();
+  const isMobile = useIsMobile();
   
   const BattingCard = ({ innings }: { innings: Innings }) => {
       const playingXI = innings.battingTeam.players.filter((p: Player) => !p.isSubstitute || p.isImpactPlayer);
@@ -261,16 +284,35 @@ export default function Scoreboard({ match, setMatch, onBowlerChange, isSimulati
                       <Legend align="right" verticalAlign="top" iconType="circle" />
                       <defs>
                           <linearGradient id="fillTeam1" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="var(--color-team1)" stopOpacity={0.8}/>
-                            <stop offset="95%" stopColor="var(--color-team1)" stopOpacity={0.1}/>
+                            <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8}/>
+                            <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.1}/>
                           </linearGradient>
                           {innings2 && <linearGradient id="fillTeam2" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="var(--color-team2)" stopOpacity={0.8}/>
-                            <stop offset="95%" stopColor="var(--color-team2)" stopOpacity={0.1}/>
+                            <stop offset="5%" stopColor="hsl(var(--chart-2))" stopOpacity={0.8}/>
+                            <stop offset="95%" stopColor="hsl(var(--chart-2))" stopOpacity={0.1}/>
                           </linearGradient>}
                       </defs>
-                      <Area type="monotone" dataKey={innings1.battingTeam.name} stroke={`hsl(var(--chart-1))`} strokeWidth={2} fillOpacity={1} fill="url(#fillTeam1)" dot={false} />
-                      {innings2 && <Area type="monotone" dataKey={innings2.battingTeam.name} stroke={`hsl(var(--chart-2))`} strokeWidth={2} fillOpacity={1} fill="url(#fillTeam2)" dot={false} />}
+                      <Area 
+                        type="monotone" 
+                        dataKey={innings1.battingTeam.name} 
+                        stroke={`hsl(var(--primary))`} 
+                        strokeWidth={2} 
+                        fillOpacity={1} 
+                        fill="url(#fillTeam1)" 
+                        dot={false} 
+                        activeDot={{ r: 6, className: "animate-pulse" }}
+                      />
+                      {innings2 && 
+                        <Area 
+                          type="monotone" 
+                          dataKey={innings2.battingTeam.name} 
+                          stroke={`hsl(var(--chart-2))`} 
+                          strokeWidth={2} 
+                          fillOpacity={1} 
+                          fill="url(#fillTeam2)" 
+                          dot={false} 
+                          activeDot={{ r: 6, className: "animate-pulse" }}
+                        />}
                   </AreaChart>
               </ChartContainer>
           </div>
@@ -378,6 +420,9 @@ export default function Scoreboard({ match, setMatch, onBowlerChange, isSimulati
 
   return (
     <Card className="shadow-none border-0">
+        <div className="absolute top-2 right-2 z-10">
+          <ThemeToggle />
+        </div>
         <CardContent className="p-0 bg-muted/40 rounded-lg">
             {isFreeHit && (
               <div className="p-2 text-center bg-destructive text-white font-bold">
@@ -395,13 +440,93 @@ export default function Scoreboard({ match, setMatch, onBowlerChange, isSimulati
                 <BowlerSelection />
             ) : (
                 <Tabs defaultValue="scoreboard" className="w-full">
-                    <TabsList className="grid w-full grid-cols-6 rounded-b-none h-auto bg-card border-b">
-                        <TabsTrigger value="scoreboard" className="rounded-none rounded-tl-lg">Scoreboard {isPowerplay && <Badge variant="destructive" className="ml-2">P</Badge>}</TabsTrigger>
-                        <TabsTrigger value="summary" className="rounded-none">Summary</TabsTrigger>
-                        <TabsTrigger value="timeline" className="rounded-none">Timeline</TabsTrigger>
-                        <TabsTrigger value="runrate" className="rounded-none">Run Rate</TabsTrigger>
-                        <TabsTrigger value="worm" className="rounded-none">Worm</TabsTrigger>
-                        <TabsTrigger value="fow" className="rounded-none rounded-tr-lg">FoW</TabsTrigger>
+                    <TabsList className="grid w-full grid-cols-10 rounded-b-none h-auto bg-card border-b">
+                        <TooltipProvider>
+                            <ShadTooltip>
+                                <TooltipTrigger asChild>
+                                    <TabsTrigger value="scoreboard" className="rounded-none rounded-tl-lg">
+                                        <ScoreboardIcon className="h-5 w-5" />
+                                        {isPowerplay && <Badge variant="destructive" className="ml-1 sm:ml-2">P</Badge>}
+                                    </TabsTrigger>
+                                </TooltipTrigger>
+                                <TooltipContent>Scoreboard</TooltipContent>
+                            </ShadTooltip>
+                            <ShadTooltip>
+                                <TooltipTrigger asChild>
+                                    <TabsTrigger value="summary" className="rounded-none">
+                                        <SummaryIcon className="h-5 w-5" />
+                                    </TabsTrigger>
+                                </TooltipTrigger>
+                                <TooltipContent>Summary</TooltipContent>
+                            </ShadTooltip>
+                            <ShadTooltip>
+                                <TooltipTrigger asChild>
+                                    <TabsTrigger value="timeline" className="rounded-none">
+                                        <TimelineIcon className="h-5 w-5" />
+                                    </TabsTrigger>
+                                </TooltipTrigger>
+                                <TooltipContent>Timeline</TooltipContent>
+                            </ShadTooltip>
+                            <ShadTooltip>
+                                <TooltipTrigger asChild>
+                                    <TabsTrigger value="runrate" className="rounded-none">
+                                        <RunRateIcon className="h-5 w-5" />
+                                    </TabsTrigger>
+                                </TooltipTrigger>
+                                <TooltipContent>Run Rate</TooltipContent>
+                            </ShadTooltip>
+                            <ShadTooltip>
+                                <TooltipTrigger asChild>
+                                    <TabsTrigger value="worm" className="rounded-none">
+                                        <WormIcon className="h-5 w-5" />
+                                    </TabsTrigger>
+                                </TooltipTrigger>
+                                <TooltipContent>Worm</TooltipContent>
+                            </ShadTooltip>
+                            <ShadTooltip>
+                                <TooltipTrigger asChild>
+                                    <TabsTrigger value="fow" className="rounded-none">
+                                        <FowIcon className="h-5 w-5" />
+                                    </TabsTrigger>
+                                </TooltipTrigger>
+                                <TooltipContent>Fall of Wickets</TooltipContent>
+                            </ShadTooltip>
+                            <ShadTooltip>
+                                <TooltipTrigger asChild>
+                                    <TabsTrigger value="partnerships" className="rounded-none">
+                                        <PartnershipsIcon className="h-5 w-5" />
+                                    </TabsTrigger>
+                                </TooltipTrigger>
+                                <TooltipContent>Partnerships</TooltipContent>
+                            </ShadTooltip>
+                            <ShadTooltip>
+                                <TooltipTrigger asChild>
+                                    <TabsTrigger value="manhattan" className="rounded-none">
+                                        <ManhattanIcon className="h-5 w-5" />
+                                    </TabsTrigger>
+                                </TooltipTrigger>
+                                <TooltipContent>Manhattan</TooltipContent>
+                            </ShadTooltip>
+                            <ShadTooltip>
+                                <TooltipTrigger asChild>
+                                    <TabsTrigger value="phases" className="rounded-none">
+                                        <PhasesIcon className="h-5 w-5" />
+                                    </TabsTrigger>
+                                </TooltipTrigger>
+                                <TooltipContent>Phases</TooltipContent>
+                            </ShadTooltip>
+                            {match.currentInnings > 1 && (
+                                <ShadTooltip>
+                                    <TooltipTrigger asChild>
+                                        <TabsTrigger value="winprob" className="rounded-none rounded-tr-lg">
+                                            <WinProbIcon className="h-5 w-5" />
+                                        </TabsTrigger>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Win Probability</TooltipContent>
+                                </ShadTooltip>
+                            )}
+                            {match.currentInnings === 1 && <TabsTrigger value="" className="rounded-none rounded-tr-lg invisible"></TabsTrigger>}
+                        </TooltipProvider>
                     </TabsList>
                     <TabsContent value="summary" className="p-3">
                         <InningsSummary innings={currentInnings} />
@@ -424,16 +549,30 @@ export default function Scoreboard({ match, setMatch, onBowlerChange, isSimulati
                             )}
                         </Tabs>
                     </TabsContent>
-                    <TabsContent value="timeline" className="p-0">
-                        <Timeline innings={match.innings[match.currentInnings - 1]} />
+                <TabsContent value="timeline" className="p-0">
+                    <Timeline innings={match.innings[match.currentInnings - 1]} />
+                </TabsContent>
+                <TabsContent value="runrate" className="p-3">
+                    <RunRateChart />
+                </TabsContent>
+                <TabsContent value="worm" className="p-3">
+                    <WormGraph />
+                </TabsContent>
+                <TabsContent value="partnerships" className="p-3">
+                    <PartnershipAnalysis innings={currentInnings} />
+                </TabsContent>
+                <TabsContent value="manhattan" className="p-3">
+                    <ManhattanChart innings={currentInnings} />
+                </TabsContent>
+                <TabsContent value="phases" className="p-3">
+                    <PhaseAnalysis innings={currentInnings} matchType={match.matchType} />
+                </TabsContent>
+                {match.currentInnings > 1 && (
+                    <TabsContent value="winprob" className="p-3">
+                        <WinProbability match={match} />
                     </TabsContent>
-                     <TabsContent value="runrate" className="p-3">
-                        <RunRateChart />
-                    </TabsContent>
-                    <TabsContent value="worm" className="p-3">
-                        <WormGraph />
-                    </TabsContent>
-                    <TabsContent value="fow" className="p-3 space-y-3">
+                )}
+                <TabsContent value="fow" className="p-3 space-y-3">
                         <Tabs defaultValue="innings1">
                             <TabsList className="grid w-full grid-cols-2 bg-card rounded-md">
                                 <TabsTrigger value="innings1" className="rounded-md data-[state=active]:bg-primary/10">{innings1.battingTeam.name}</TabsTrigger>
@@ -454,4 +593,8 @@ export default function Scoreboard({ match, setMatch, onBowlerChange, isSimulati
       </CardContent>
     </Card>
   );
+}
+
+export default function Scoreboard(props: { match: Match, setMatch: (match: Match) => void, onBowlerChange: (bowlerId: number) => void, isSimulating?: boolean }) {
+  return <ScoreboardContent {...props} />;
 }

@@ -1,20 +1,19 @@
 import { defineFlow, run } from '@genkit-ai/flow';
 import { z } from 'zod';
 import { ai } from '../genkit';
-import { SimulateOverInputSchema, SimulateOverOutputSchema } from '../../types';
+import { SimulateBallInputSchema, SimulateBallOutputSchema } from '@/types';
 
-export const simulateOver = defineFlow(
+export const simulateBall = defineFlow(
   {
-    name: 'simulateOver',
-    inputSchema: SimulateOverInputSchema,
-    outputSchema: SimulateOverOutputSchema,
+    name: 'simulateBall',
+    inputSchema: SimulateBallInputSchema,
+    outputSchema: SimulateBallOutputSchema,
   },
   async (input) => {
     const llmResponse = await run('google-ai-generate', async () => ai.generate(`
-        You are a cricket simulation expert. Based on the following match context, predict the outcome of the next over.
+        You are a cricket simulation expert. Based on the following match context, predict the outcome of the next ball.
         Context: ${input.matchContext}
-        Your response should be a JSON object with the exact key: "over", which is an array of 6 ball objects.
-        Each ball object should have the exact keys: "event", "runs", "extras", "wicketType", "fielderId".
+        Your response should be a JSON object with the exact keys: "event", "runs", "extras", "wicketType", "fielderId".
         - "event": "run", "w", "wd", "nb", "lb", "b"
         - "runs": Number of runs scored off the bat.
         - "extras": Number of extra runs.

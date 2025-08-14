@@ -4,17 +4,12 @@ import { useState, useEffect } from "react";
 import type { Match, BallEvent, Team, BallDetails, GenerateMatchCommentaryInput, FielderPlacement } from "@/types"
 import { processBall, undoLastBall, updateFieldPlacements, getMatchSituation, getPowerplayOvers } from "@/lib/cricket-logic"
 import { generateMatchCommentary } from "@/ai/flows/generate-match-commentary";
-import { Button } from "@/components/ui/button"
-import { SimulationEngine } from "@/simulation/engine";
-import { RuleBasedStrategy } from "@/simulation/strategies/rule-based-strategy";
-import { TemplateStrategy } from "@/simulation/strategies/template-strategy";
-import { AiStrategy } from "@/simulation/strategies/ai-strategy";
-import { StatisticalStrategy } from "@/simulation/strategies/statistical-strategy";
-import { CacheStrategy } from "@/simulation/strategies/cache-strategy";
-import { analyzeContext } from "@/simulation/context-analyzer";
+import { Button } from "../components/ui/button"
 import { BallOutcome } from "@/simulation/types";
+import { motion } from "framer-motion";
+import { PieChart } from "lucide-react";
 import { Prisma } from "@prisma/client";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card"
 import Scoreboard from "./scoreboard"
 import { Separator } from "./ui/separator"
 import CommentaryGenerator from "./commentary-generator"
@@ -29,7 +24,7 @@ import FieldEditor from "./field-editor"; // Assuming you'll create this compone
 
 
 type ScoringInterfaceProps = {
-  match: Match & { manOfTheMatch?: string }
+  match: Match
   setMatch: (match: Match) => void
   endMatch: () => void
 }
@@ -42,7 +37,6 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
   const { toast } = useToast();
   const [isManagePlayersOpen, setIsManagePlayersOpen] = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
-  const [manOfTheMatch, setManOfTheMatch] = useState(match.manOfTheMatch || "");
   const [commentary, setCommentary] = useState<string[]>([]);
   const [wicketTaker, setWicketTaker] = useState<{type: string, fielderId: number | null}>({type: '', fielderId: null});
   const [isFieldEditorOpen, setIsFieldEditorOpen] = useState(false);
@@ -167,61 +161,20 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
     setIsSimulating(true);
 
     try {
-      // 1. Set up the simulation engine
-      const simulationEngine = new SimulationEngine([
-        new CacheStrategy(),
-        new AiStrategy(7, aiAggression),
-        new StatisticalStrategy(),
-        new TemplateStrategy(),
-        new RuleBasedStrategy(),
-      ]);
+      const response = await fetch('/api/simulate-over', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ match, aiAggression }),
+      });
 
-      // 2. Create the match context
-      // This is a bit tricky because the client-side Match type is different from the Prisma one.
-      // We need to create a mock Prisma-like object for the context analyzer.
-      // This should be refactored later to have a unified data model.
-      const mockMatchForContext = {
-        ...match,
-        id: 0,
-        date: new Date(),
-        team1Id: match.teams[0].id,
-        team2Id: match.teams[1].id,
-        tossWinnerId: match.teams.find(t => t.name === match.toss.winner)?.id ?? 0,
-        innings: match.innings.map(inning => ({
-          id: 0,
-          matchId: 0,
-          battingTeamId: inning.battingTeam.id,
-          bowlingTeamId: inning.bowlingTeam.id,
-          score: inning.score,
-          wickets: inning.wickets,
-          overs: inning.overs,
-          balls: [], // Placeholder
-        })),
-      };
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to simulate over');
+      }
 
-      const mockCurrentInningsForContext = {
-        id: 0,
-        matchId: 0,
-        battingTeamId: currentInnings.battingTeam.id,
-        bowlingTeamId: currentInnings.bowlingTeam.id,
-        score: currentInnings.score,
-        wickets: currentInnings.wickets,
-        overs: currentInnings.overs,
-        balls: [], // Placeholder
-      };
-
-      const context = analyzeContext(
-        mockMatchForContext as any, // Using 'any' to bridge the type gap for now
-        mockCurrentInningsForContext as any,
-        currentInnings.battingTeam as any,
-        currentInnings.bowlingTeam as any,
-        onStrikeBatsman as any,
-        nonStrikeBatsman as any,
-        currentBowler as any
-      );
-
-      // 3. Run the simulation
-      const result = await simulationEngine.simulateOver(context);
+      const result = await response.json();
 
       toast({
         title: `Simulation Complete (${result.debug.pattern || result.debug.flow})`,
@@ -290,60 +243,6 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
 
   const canSimulate = currentInnings.currentBowler !== -1 && match.status === 'inprogress';
   const scoringControlsDisabled = isSimulating || currentInnings.currentBowler === -1 || match.status === 'finished';
-
-  const formatScoreboardForAI = (inning: any) => {
-    let scoreboard = `${inning.battingTeam.name} Innings:\n`;
-    scoreboard += `Total: ${inning.score}/${inning.wickets} in ${inning.overs}.${inning.ballsThisOver} overs\n\n`;
-    scoreboard += `Batsman\tRuns\tBalls\t4s\t6s\tSR\n`;
-    inning.battingTeam.players.forEach((player: any) => {
-      if (player.batting.ballsFaced > 0) {
-        const sr = player.batting.ballsFaced > 0 ? (player.batting.runs / player.batting.ballsFaced * 100).toFixed(2) : "0.00";
-        scoreboard += `${player.name}\t${player.batting.runs}\t${player.batting.ballsFaced}\t${player.batting.fours}\t${player.batting.sixes}\t${sr}\n`;
-      }
-    });
-    scoreboard += `\nBowler\tOvers\tRuns\tWickets\tEcon\n`;
-    inning.bowlingTeam.players.forEach((player: any) => {
-      if (player.bowling.ballsBowled > 0) {
-        const overs = `${Math.floor(player.bowling.ballsBowled / 6)}.${player.bowling.ballsBowled % 6}`;
-        const econ = player.bowling.ballsBowled > 0 ? (player.bowling.runsConceded / (player.bowling.ballsBowled / 6)).toFixed(2) : "0.00";
-        scoreboard += `${player.name}\t${overs}\t${player.bowling.runsConceded}\t${player.bowling.wickets}\t${econ}\n`;
-      }
-    });
-    return scoreboard;
-  };
-
-  useEffect(() => {
-    const determineMotm = async () => {
-      if (match.status === 'finished' && !manOfTheMatch) {
-        const scoreboardInnings1 = formatScoreboardForAI(match.innings[0]);
-        const scoreboardInnings2 = match.innings.length > 1 ? formatScoreboardForAI(match.innings[1]) : "";
-        
-        try {
-          const response = await fetch('/api/motm', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ scoreboardInnings1, scoreboardInnings2 }),
-          });
-          const data = await response.json();
-          if (response.ok) {
-            setManOfTheMatch(data.manOfTheMatch);
-            const newMatch = { ...match, manOfTheMatch: data.manOfTheMatch };
-            setMatch(newMatch);
-          } else {
-            throw new Error(data.error);
-          }
-        } catch (error) {
-          console.error("Failed to determine Man of the Match", error);
-          toast({
-            variant: "destructive",
-            title: "AI Error",
-            description: "Could not determine Man of the Match.",
-          });
-        }
-      }
-    };
-    determineMotm();
-  }, [match.status]);
 
   const renderWicketDialog = () => (
     <AlertDialogContent>
@@ -509,7 +408,6 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
             {match.status === 'finished' && (
               <div className="p-4 text-center bg-green-100 dark:bg-green-900 rounded-lg">
                 <p className="font-bold text-xl text-green-700 dark:text-green-300">{match.result}</p>
-                {manOfTheMatch && <p className="font-semibold text-lg text-green-600 dark:text-green-400">Man of the Match: {manOfTheMatch}</p>}
               </div>
             )}
             <div className="flex justify-around items-center">
@@ -536,22 +434,75 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
             </div>
             <Separator className="my-4"/>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-left text-sm">
-                <div className="bg-card p-3 rounded-md">
-                    <p className="font-semibold truncate text-primary">{onStrikeBatsman?.name}{onStrikeBatsman?.id === currentInnings.batsmanOnStrike ? '*' : ''}</p>
+                <motion.div 
+                  className="bg-card p-3 rounded-md shadow-sm border border-border/50"
+                  whileHover={{ scale: 1.02 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 10 }}
+                >
+                    <div className="flex items-center gap-1">
+                      <div className="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
+                      <p className="font-semibold truncate text-primary">{onStrikeBatsman?.name}{onStrikeBatsman?.id === currentInnings.batsmanOnStrike ? '*' : ''}</p>
+                    </div>
                     <p className="text-muted-foreground text-xs">{onStrikeBatsman?.batting.runs} ({onStrikeBatsman?.batting.ballsFaced})</p>
-                </div>
-                <div className="bg-card p-3 rounded-md">
+                    <div className="mt-1 h-1 bg-muted rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-primary" 
+                        style={{ width: `${Math.min((onStrikeBatsman?.batting.runs || 0) / 50 * 100, 100)}%` }}
+                      ></div>
+                    </div>
+                </motion.div>
+                <motion.div 
+                  className="bg-card p-3 rounded-md shadow-sm border border-border/50"
+                  whileHover={{ scale: 1.02 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 10 }}
+                >
                      <p className="font-semibold truncate">{nonStrikeBatsman?.name}</p>
                      <p className="text-muted-foreground text-xs">{nonStrikeBatsman?.batting.runs} ({nonStrikeBatsman?.batting.ballsFaced})</p>
-                </div>
-                 <div className="bg-card p-3 rounded-md">
-                    <p className="font-semibold truncate text-primary">{currentBowler?.name || 'N/A'}</p>
-                     {currentBowler ? <p className="text-muted-foreground text-xs">{currentBowler?.bowling.wickets}/{currentBowler?.bowling.runsConceded} ({Math.floor(currentBowler?.bowling.ballsBowled/6)}.{currentBowler?.bowling.ballsBowled % 6})</p> : <p className="text-muted-foreground text-xs">Overs: {currentInnings.overs}</p>}
-                </div>
-                 <div className="bg-card p-3 rounded-md">
-                    <p className="font-semibold">Partnership</p>
+                     <div className="mt-1 h-1 bg-muted rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-muted-foreground" 
+                        style={{ width: `${Math.min((nonStrikeBatsman?.batting.runs || 0) / 50 * 100, 100)}%` }}
+                      ></div>
+                    </div>
+                </motion.div>
+                 <motion.div 
+                  className="bg-card p-3 rounded-md shadow-sm border border-border/50"
+                  whileHover={{ scale: 1.02 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 10 }}
+                >
+                    <div className="flex items-center gap-1">
+                      <div className="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
+                      <p className="font-semibold truncate text-primary">{currentBowler?.name || 'N/A'}</p>
+                    </div>
+                     {currentBowler ? 
+                      <>
+                        <p className="text-muted-foreground text-xs">{currentBowler?.bowling.wickets}/{currentBowler?.bowling.runsConceded} ({Math.floor(currentBowler?.bowling.ballsBowled/6)}.{currentBowler?.bowling.ballsBowled % 6})</p>
+                        <div className="mt-1 h-1 bg-muted rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-destructive" 
+                            style={{ width: `${Math.min((currentBowler?.bowling.wickets || 0) / 3 * 100, 100)}%` }}
+                          ></div>
+                        </div>
+                      </> : 
+                      <p className="text-muted-foreground text-xs">Select bowler</p>}
+                </motion.div>
+                 <motion.div 
+                  className="bg-card p-3 rounded-md shadow-sm border border-border/50"
+                  whileHover={{ scale: 1.02 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 10 }}
+                >
+                    <div className="flex items-center gap-1">
+                      <PieChart className="w-4 h-4 text-muted-foreground" />
+                      <p className="font-semibold">Partnership</p>
+                    </div>
                     <p className="text-muted-foreground text-xs">{currentInnings.currentPartnership.runs} ({currentInnings.currentPartnership.balls})</p>
-                </div>
+                    <div className="mt-1 h-1 bg-muted rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-[hsl(var(--chart-2))]" 
+                        style={{ width: `${Math.min((currentInnings.currentPartnership.runs || 0) / 50 * 100, 100)}%` }}
+                      ></div>
+                    </div>
+                </motion.div>
             </div>
              {match.status === 'finished' && (
               <div className="mt-6">

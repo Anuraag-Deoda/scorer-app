@@ -13,10 +13,9 @@ export class SimulationEngine {
   }
 
   public async simulateOver(
-    context: CricketContext,
-    previousOverResult?: OverSimulationResult
+    context: CricketContext
   ): Promise<OverSimulationResult> {
-    const strategy = this.selectStrategy(context, previousOverResult);
+    const strategy = this.selectStrategy(context);
 
     console.log(`Using strategy: ${strategy.name} for complexity ${context.complexity}`);
 
@@ -36,9 +35,9 @@ export class SimulationEngine {
     return result;
   }
 
-  private selectStrategy(context: CricketContext, previousOverResult?: OverSimulationResult): SimulationStrategy {
+  private selectStrategy(context: CricketContext): SimulationStrategy {
     for (const strategy of this.strategies) {
-      if (strategy.canHandle(context, previousOverResult)) {
+      if (strategy.canHandle(context)) {
         return strategy;
       }
     }

@@ -107,6 +107,12 @@ export interface Innings {
   currentBowler: number;
   fieldPlacements?: FielderPlacement[];
   isFreeHit?: boolean;
+  partnerships?: Array<{
+    batsman1: number;
+    batsman2: number;
+    runs: number;
+    balls: number;
+  }>;
 }
 
 export interface Match {
@@ -125,7 +131,12 @@ export interface Match {
   superOver?: {
     innings: Innings[];
     currentInnings: 1 | 2;
-  }
+  };
+  specialPlayerIds?: {
+    anuraagIds: number[];
+    prashantIds: number[];
+    harshalIds: number[];
+  };
 }
 
 export type BallEvent = 'run' | 'w' | 'wd' | 'nb' | 'lb' | 'b';
@@ -138,6 +149,11 @@ export interface MatchSettings {
     decision: 'bat' | 'bowl';
   };
   matchType: MatchType;
+  specialPlayerIds?: {
+    anuraagIds: number[];
+    prashantIds: number[];
+    harshalIds: number[];
+  };
 }
 
 export interface BallDetails {
@@ -203,3 +219,18 @@ export const SimulateOverOutputSchema = z.object({
     over: z.array(OverBallSchema).describe("An array of 6 legal deliveries representing the simulated over."),
 });
 export type SimulateOverOutput = z.infer<typeof SimulateOverOutputSchema>;
+
+export const SimulateBallInputSchema = z.object({
+  matchContext: z.string().describe("A summary of the current state of the match."),
+  bowlingTeamPlayerIds: z.string().describe("A comma-separated list of player IDs for the bowling team, to be used for picking fielders."),
+});
+export type SimulateBallInput = z.infer<typeof SimulateBallInputSchema>;
+
+export const SimulateBallOutputSchema = z.object({
+    event: BallEventSchema.describe("The type of event for the ball (run, wicket, wide, no ball, leg bye, bye)."),
+    runs: z.number().int().min(0).max(6).describe("Runs scored off the bat. For 'lb' or 'b' events, this is 0."),
+    extras: z.number().int().min(0).describe("Extra runs (for wides, no balls, leg byes, or byes)."),
+    wicketType: WicketTypeSchema.optional().describe("If it was a wicket, the type of dismissal."),
+    fielderId: z.number().int().optional().describe("If the dismissal involved a fielder (Caught, Run Out), their player ID."),
+});
+export type SimulateBallOutput = z.infer<typeof SimulateBallOutputSchema>;

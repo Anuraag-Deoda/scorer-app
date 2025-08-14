@@ -5,7 +5,8 @@ import {
   BallOutcome,
   WicketType,
 } from '../types';
-import { getPlayerAdjustedProbabilities, transitionMatrices } from '../probabilities';
+import { transitionMatrices } from '../probabilities';
+import { cloneDeep } from 'lodash';
 import { updateContextAfterBall } from '../context-analyzer';
 
 export class StatisticalStrategy implements SimulationStrategy {
@@ -42,8 +43,7 @@ export class StatisticalStrategy implements SimulationStrategy {
   }
 
   private simulateBall(context: CricketContext): BallOutcome {
-    let baseProbs = transitionMatrices[context.phase];
-    baseProbs = getPlayerAdjustedProbabilities(context, baseProbs);
+    const baseProbs = cloneDeep(transitionMatrices[context.phase]);
 
     // Adjust probabilities based on context
     const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
@@ -76,16 +76,11 @@ export class StatisticalStrategy implements SimulationStrategy {
         baseProbs.SIX! = clamp(baseProbs.SIX! * aggressionFactor, 0, 0.4);
     }
 
-    // Special logic for Prashant's batting innings
-    if (context.striker.name.toLowerCase().includes('prashant') && context.strikerBallsFaced > 20) {
-      baseProbs.WICKET! *= 3.0; // Massively increase wicket chance after 20 balls
-    }
-
     // Normalize probabilities
     const totalProb = Object.values(baseProbs).reduce((sum, p) => sum! + p!, 0);
     if (totalProb === 0) {
         // This should not happen, but as a fallback, return a dot ball.
-        return { type: 'DOT' };
+        return { type: 'DOT', runs: 0 };
     }
     const normalizedProbs = Object.entries(baseProbs).reduce((acc, [key, value]) => {
         acc[key as BallOutcome['type']] = Math.max(0, value!) / totalProb; // Ensure no negative probabilities
@@ -101,14 +96,14 @@ export class StatisticalStrategy implements SimulationStrategy {
       if (random < cumulativeProb) {
         const type = key as BallOutcome['type'];
         switch (type) {
-          case 'DOT': return { type };
+          case 'DOT': return { type, runs: 0 };
           case 'SINGLE': return { type, runs: 1 };
           case 'DOUBLE': return { type, runs: 2 };
           case 'FOUR': return { type, runs: 4 };
           case 'SIX': return { type, runs: 6 };
           case 'WICKET':
             const wicketTypes: WicketType[] = ['BOWLED', 'CAUGHT', 'LBW'];
-            return { type, wicketType: wicketTypes[Math.floor(Math.random() * wicketTypes.length)] };
+            return { type, wicketType: wicketTypes[Math.floor(Math.random() * wicketTypes.length)], runs: 0 };
           case 'WIDE': return { type, runs: 1 };
           case 'NO_BALL': return { type, runs: 1 };
           case 'BYE': return { type, runs: 1 };
@@ -117,6 +112,6 @@ export class StatisticalStrategy implements SimulationStrategy {
       }
     }
 
-    return { type: 'DOT' }; // Fallback
+    return { type: 'DOT', runs: 0 }; // Fallback
   }
 }

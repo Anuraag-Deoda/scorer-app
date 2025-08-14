@@ -1,14 +1,16 @@
+import { Match, Player, Team } from '@prisma/client';
+
 // Represents the broader context of the cricket match
 export interface CricketContext {
-  match: any;
+  match: Match;
   innings: number;
   over: number;
   ball: number;
-  battingTeam: any;
-  bowlingTeam: any;
-  striker: any;
-  nonStriker: any;
-  bowler: any;
+  battingTeam: Team & { players: Player[] };
+  bowlingTeam: Team & { players: Player[] };
+  striker: Player;
+  nonStriker: Player;
+  bowler: Player;
   strikerBallsFaced: number;
   // Analysis components
   pressure: PressureMetrics;
@@ -16,6 +18,7 @@ export interface CricketContext {
   phase: MatchPhase;
   complexity: number; // Scale of 1-10
   lastPatternId?: string;
+  specialPlayerIds?: any;
 }
 
 // Metrics to quantify pressure on the batting side
@@ -41,8 +44,8 @@ export type MatchPhase = 'POWERPLAY' | 'MIDDLE_OVERS' | 'DEATH_OVERS';
 export interface SimulationStrategy {
   name: string;
   priority: number; // Lower number means higher priority
-  canHandle(context: CricketContext, previousOverResult?: OverSimulationResult): boolean;
-  simulate(context: CricketContext, previousOverResult?: OverSimulationResult): Promise<OverSimulationResult>;
+  canHandle(context: CricketContext): boolean;
+  simulate(context: CricketContext): Promise<OverSimulationResult>;
 }
 
 // The result of a single over simulation
@@ -55,12 +58,12 @@ export interface OverSimulationResult {
 
 // Represents the outcome of a single ball
 export type BallOutcome =
-  | { type: 'DOT' }
+  | { type: 'DOT'; runs: 0 }
   | { type: 'SINGLE'; runs: 1 }
   | { type: 'DOUBLE'; runs: 2 }
   | { type: 'FOUR'; runs: 4 }
   | { type: 'SIX'; runs: 6 }
-  | { type: 'WICKET'; wicketType: WicketType }
+  | { type: 'WICKET'; wicketType: WicketType; runs: 0 }
   | { type: 'WIDE'; runs: 1 }
   | { type: 'NO_BALL'; runs: 1 }
   | { type: 'BYE'; runs: 1 }
