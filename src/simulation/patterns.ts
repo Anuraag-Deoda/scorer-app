@@ -21,7 +21,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 3,
         tags: ['death', 'pressure'],
         variations: [
-            { outcomes: [{ type: 'SINGLE', runs: 1 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOUBLE', runs: 2 }, { type: 'DOT' }], contextTags: ['yorkers'] },
+            { outcomes: [{ type: 'SINGLE', runs: 1 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOUBLE', runs: 2 }, { type: 'DOT', runs: 0 }], contextTags: ['yorkers'] },
         ],
     },
     {
@@ -39,7 +39,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 9,
         tags: ['powerplay', 'momentum-swing'],
         variations: [
-            { outcomes: [{ type: 'FOUR', runs: 4 }, { type: 'FOUR', runs: 4 }, { type: 'DOT' }, { type: 'SIX', runs: 6 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }], contextTags: ['attacking_batting'] },
+            { outcomes: [{ type: 'FOUR', runs: 4 }, { type: 'FOUR', runs: 4 }, { type: 'DOT', runs: 0 }, { type: 'SIX', runs: 6 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }], contextTags: ['attacking_batting'] },
         ],
     },
     {
@@ -48,7 +48,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 6,
         tags: ['middle', 'momentum-swing'],
         variations: [
-            { outcomes: [{ type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'WICKET', wicketType: 'STUMPED' }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }], contextTags: ['spin_bowling'] },
+            { outcomes: [{ type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'WICKET', wicketType: 'STUMPED', runs: 0 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }], contextTags: ['spin_bowling'] },
         ],
     },
     {
@@ -57,7 +57,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 7,
         tags: ['death', 'pressure'],
         variations: [
-            { outcomes: [{ type: 'SIX', runs: 6 }, { type: 'WICKET', wicketType: 'CAUGHT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }], contextTags: ['slogging_error'] },
+            { outcomes: [{ type: 'SIX', runs: 6 }, { type: 'WICKET', wicketType: 'CAUGHT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }], contextTags: ['slogging_error'] },
         ],
     },
     {
@@ -66,7 +66,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 4,
         tags: ['powerplay', 'death', 'momentum-swing'],
         variations: [
-            { outcomes: [{ type: 'FOUR', runs: 4 }, { type: 'WICKET', wicketType: 'CAUGHT' }, { type: 'SIX', runs: 6 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }], contextTags: ['aggressive_batting'] },
+            { outcomes: [{ type: 'FOUR', runs: 4 }, { type: 'WICKET', wicketType: 'CAUGHT', runs: 0 }, { type: 'SIX', runs: 6 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }], contextTags: ['aggressive_batting'] },
         ],
     },
     {
@@ -75,7 +75,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 2,
         tags: ['middle', 'pressure'],
         variations: [
-            { outcomes: [{ type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'WICKET', wicketType: 'RUN_OUT' }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }], contextTags: ['miscommunication'] },
+            { outcomes: [{ type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'WICKET', wicketType: 'RUN_OUT', runs: 0 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }], contextTags: ['miscommunication'] },
         ],
     },
     {
@@ -84,7 +84,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 1,
         tags: ['pressure'],
         variations: [
-            { outcomes: [{ type: 'NO_BALL', runs: 1 }, { type: 'WICKET', wicketType: 'RUN_OUT' }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'FOUR', runs: 4 }], contextTags: ['drama'] },
+            { outcomes: [{ type: 'NO_BALL', runs: 1 }, { type: 'WICKET', wicketType: 'RUN_OUT', runs: 0 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'FOUR', runs: 4 }], contextTags: ['drama'] },
         ],
     },
     {
@@ -93,7 +93,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 0.1,
         tags: ['pressure', 'momentum-swing'],
         variations: [
-            { outcomes: [{ type: 'WICKET', wicketType: 'BOWLED' }, { type: 'WICKET', wicketType: 'LBW' }, { type: 'WICKET', wicketType: 'CAUGHT' }], contextTags: ['history'] },
+            { outcomes: [{ type: 'WICKET', wicketType: 'BOWLED', runs: 0 }, { type: 'WICKET', wicketType: 'LBW', runs: 0 }, { type: 'WICKET', wicketType: 'CAUGHT', runs: 0 }], contextTags: ['history'] },
         ],
     },
     {
@@ -102,7 +102,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 1,
         tags: ['death', 'pressure'],
         variations: [
-            { outcomes: [{ type: 'SINGLE', runs: 1 }, { type: 'SINGLE', runs: 1 }, { type: 'DOUBLE', runs: 2 }, { type: 'WICKET', wicketType: 'RUN_OUT' }, { type: 'SINGLE', runs: 1 }, { type: 'SIX', runs: 6 }], contextTags: ['clutch'] },
+            { outcomes: [{ type: 'SINGLE', runs: 1 }, { type: 'SINGLE', runs: 1 }, { type: 'DOUBLE', runs: 2 }, { type: 'WICKET', wicketType: 'RUN_OUT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'SIX', runs: 6 }], contextTags: ['clutch'] },
         ],
     },
 
@@ -113,7 +113,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 3,
         tags: ['pressure', 'middle'],
         variations: [
-            { outcomes: [{ type: 'DOT' }, { type: 'DOT' }, { type: 'DOT' }, { type: 'DOT' }, { type: 'DOT' }, { type: 'DOT' }], contextTags: ['tight_bowling'] },
+            { outcomes: [{ type: 'DOT', runs: 0 }, { type: 'DOT', runs: 0 }, { type: 'DOT', runs: 0 }, { type: 'DOT', runs: 0 }, { type: 'DOT', runs: 0 }, { type: 'DOT', runs: 0 }], contextTags: ['tight_bowling'] },
         ],
     },
     {
@@ -122,7 +122,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 6,
         tags: ['powerplay', 'momentum-swing'],
         variations: [
-            { outcomes: [{ type: 'FOUR', runs: 4 }, { type: 'FOUR', runs: 4 }, { type: 'SINGLE', runs: 1 }, { type: 'FOUR', runs: 4 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }], contextTags: ['aggressive_batting'] },
+            { outcomes: [{ type: 'FOUR', runs: 4 }, { type: 'FOUR', runs: 4 }, { type: 'SINGLE', runs: 1 }, { type: 'FOUR', runs: 4 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }], contextTags: ['aggressive_batting'] },
         ],
     },
     {
@@ -131,7 +131,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 8,
         tags: ['middle'],
         variations: [
-            { outcomes: [{ type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }], contextTags: ['spin_bowling'] },
+            { outcomes: [{ type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }], contextTags: ['spin_bowling'] },
         ],
     },
     {
@@ -140,7 +140,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 5,
         tags: ['death', 'momentum-swing'],
         variations: [
-            { outcomes: [{ type: 'SIX', runs: 6 }, { type: 'FOUR', runs: 4 }, { type: 'SIX', runs: 6 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOUBLE', runs: 2 }], contextTags: ['slogging'] },
+            { outcomes: [{ type: 'SIX', runs: 6 }, { type: 'FOUR', runs: 4 }, { type: 'SIX', runs: 6 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOUBLE', runs: 2 }], contextTags: ['slogging'] },
         ],
     },
     {
@@ -149,7 +149,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 4,
         tags: ['pressure', 'normal'],
         variations: [
-            { outcomes: [{ type: 'WIDE', runs: 1 }, { type: 'DOT' }, { type: 'DOT' }, { type: 'WIDE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }], contextTags: ['erratic_bowling'] },
+            { outcomes: [{ type: 'WIDE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'DOT', runs: 0 }, { type: 'WIDE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }], contextTags: ['erratic_bowling'] },
         ],
     },
     {
@@ -158,7 +158,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 3,
         tags: ['middle', 'momentum-swing'],
         variations: [
-            { outcomes: [{ type: 'WICKET', wicketType: 'BOWLED' }, { type: 'SINGLE', runs: 1 }, { type: 'WICKET', wicketType: 'CAUGHT' }, { type: 'DOT' }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }], contextTags: ['collapse'] },
+            { outcomes: [{ type: 'WICKET', wicketType: 'BOWLED', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'WICKET', wicketType: 'CAUGHT', runs: 0 }, { type: 'DOT', runs: 0 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }], contextTags: ['collapse'] },
         ],
     },
     {
@@ -167,7 +167,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 5,
         tags: ['powerplay', 'momentum-swing'],
         variations: [
-            { outcomes: [{ type: 'FOUR', runs: 4 }, { type: 'WIDE', runs: 1 }, { type: 'SIX', runs: 6 }, { type: 'FOUR', runs: 4 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }], contextTags: ['loose_bowling'] },
+            { outcomes: [{ type: 'FOUR', runs: 4 }, { type: 'WIDE', runs: 1 }, { type: 'SIX', runs: 6 }, { type: 'FOUR', runs: 4 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }], contextTags: ['loose_bowling'] },
         ],
     },
     {
@@ -176,7 +176,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 9,
         tags: ['powerplay', 'normal'],
         variations: [
-            { outcomes: [{ type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }], contextTags: ['defensive_batting'] },
+            { outcomes: [{ type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }], contextTags: ['defensive_batting'] },
         ],
     },
     {
@@ -185,7 +185,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 7,
         tags: ['middle', 'pressure'],
         variations: [
-            { outcomes: [{ type: 'SINGLE', runs: 1 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }], contextTags: ['spin_bowling'] },
+            { outcomes: [{ type: 'SINGLE', runs: 1 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }], contextTags: ['spin_bowling'] },
         ],
     },
     {
@@ -194,7 +194,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 6,
         tags: ['death', 'pressure'],
         variations: [
-            { outcomes: [{ type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'WICKET', wicketType: 'BOWLED' }], contextTags: ['yorkers'] },
+            { outcomes: [{ type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'WICKET', wicketType: 'BOWLED', runs: 0 }], contextTags: ['yorkers'] },
         ],
     },
     {
@@ -203,7 +203,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 8,
         tags: ['middle', 'normal'],
         variations: [
-            { outcomes: [{ type: 'SINGLE', runs: 1 }, { type: 'DOUBLE', runs: 2 }, { type: 'SINGLE', runs: 1 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }], contextTags: ['partnership'] },
+            { outcomes: [{ type: 'SINGLE', runs: 1 }, { type: 'DOUBLE', runs: 2 }, { type: 'SINGLE', runs: 1 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }], contextTags: ['partnership'] },
         ],
     },
     {
@@ -212,7 +212,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 3,
         tags: ['powerplay', 'death'],
         variations: [
-            { outcomes: [{ type: 'NO_BALL', runs: 1 }, { type: 'FOUR', runs: 4 }, { type: 'NO_BALL', runs: 1 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SIX', runs: 6 }], contextTags: ['erratic_bowling'] },
+            { outcomes: [{ type: 'NO_BALL', runs: 1 }, { type: 'FOUR', runs: 4 }, { type: 'NO_BALL', runs: 1 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SIX', runs: 6 }], contextTags: ['erratic_bowling'] },
         ],
     },
     {
@@ -221,7 +221,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 4,
         tags: ['middle', 'momentum-swing'],
         variations: [
-            { outcomes: [{ type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'WICKET', wicketType: 'CAUGHT' }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }], contextTags: ['pace_bowling'] },
+            { outcomes: [{ type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'WICKET', wicketType: 'CAUGHT', runs: 0 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }], contextTags: ['pace_bowling'] },
         ],
     },
     {
@@ -230,7 +230,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 7,
         tags: ['middle', 'pressure'],
         variations: [
-            { outcomes: [{ type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'DOT' }], contextTags: ['tight_bowling'] },
+            { outcomes: [{ type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'DOT', runs: 0 }], contextTags: ['tight_bowling'] },
         ],
     },
     {
@@ -239,7 +239,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 8,
         tags: ['powerplay', 'normal'],
         variations: [
-            { outcomes: [{ type: 'SINGLE', runs: 1 }, { type: 'DOUBLE', runs: 2 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }], contextTags: ['cautious_batting'] },
+            { outcomes: [{ type: 'SINGLE', runs: 1 }, { type: 'DOUBLE', runs: 2 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }], contextTags: ['cautious_batting'] },
         ],
     },
     {
@@ -248,7 +248,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 5,
         tags: ['middle', 'momentum-swing'],
         variations: [
-            { outcomes: [{ type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'WICKET', wicketType: 'STUMPED' }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }], contextTags: ['spin_bowling'] },
+            { outcomes: [{ type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'WICKET', wicketType: 'STUMPED', runs: 0 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }], contextTags: ['spin_bowling'] },
         ],
     },
     {
@@ -257,7 +257,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 4,
         tags: ['death', 'momentum-swing'],
         variations: [
-            { outcomes: [{ type: 'SIX', runs: 6 }, { type: 'SIX', runs: 6 }, { type: 'FOUR', runs: 4 }, { type: 'SINGLE', runs: 1 }, { type: 'SIX', runs: 6 }, { type: 'DOT' }], contextTags: ['slogging'] },
+            { outcomes: [{ type: 'SIX', runs: 6 }, { type: 'SIX', runs: 6 }, { type: 'FOUR', runs: 4 }, { type: 'SINGLE', runs: 1 }, { type: 'SIX', runs: 6 }, { type: 'DOT', runs: 0 }], contextTags: ['slogging'] },
         ],
     },
     {
@@ -266,7 +266,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 6,
         tags: ['middle', 'pressure'],
         variations: [
-            { outcomes: [{ type: 'WICKET', wicketType: 'LBW' }, { type: 'DOT' }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'DOT' }], contextTags: ['tight_bowling'] },
+            { outcomes: [{ type: 'WICKET', wicketType: 'LBW', runs: 0 }, { type: 'DOT', runs: 0 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'DOT', runs: 0 }], contextTags: ['tight_bowling'] },
         ],
     },
     {
@@ -275,7 +275,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 5,
         tags: ['powerplay', 'momentum-swing'],
         variations: [
-            { outcomes: [{ type: 'FOUR', runs: 4 }, { type: 'WICKET', wicketType: 'CAUGHT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }], contextTags: ['mixed_momentum'] },
+            { outcomes: [{ type: 'FOUR', runs: 4 }, { type: 'WICKET', wicketType: 'CAUGHT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }], contextTags: ['mixed_momentum'] },
         ],
     },
     {
@@ -284,7 +284,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 7,
         tags: ['middle', 'pressure'],
         variations: [
-            { outcomes: [{ type: 'DOT' }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }], contextTags: ['defensive_bowling'] },
+            { outcomes: [{ type: 'DOT', runs: 0 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }], contextTags: ['defensive_bowling'] },
         ],
     },
     {
@@ -293,7 +293,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 6,
         tags: ['powerplay', 'momentum-swing'],
         variations: [
-            { outcomes: [{ type: 'WICKET', wicketType: 'BOWLED' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }], contextTags: ['early_breakthrough'] },
+            { outcomes: [{ type: 'WICKET', wicketType: 'BOWLED', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }], contextTags: ['early_breakthrough'] },
         ],
     },
     {
@@ -302,7 +302,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 4,
         tags: ['middle', 'momentum-swing'],
         variations: [
-            { outcomes: [{ type: 'SIX', runs: 6 }, { type: 'FOUR', runs: 4 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SIX', runs: 6 }, { type: 'DOT' }], contextTags: ['aggressive_batting'] },
+            { outcomes: [{ type: 'SIX', runs: 6 }, { type: 'FOUR', runs: 4 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SIX', runs: 6 }, { type: 'DOT', runs: 0 }], contextTags: ['aggressive_batting'] },
         ],
     },
     {
@@ -311,7 +311,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 3,
         tags: ['powerplay', 'death'],
         variations: [
-            { outcomes: [{ type: 'WIDE', runs: 1 }, { type: 'WIDE', runs: 1 }, { type: 'SINGLE', runs: 1 }, { type: 'FOUR', runs: 4 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }], contextTags: ['erratic_bowling'] },
+            { outcomes: [{ type: 'WIDE', runs: 1 }, { type: 'WIDE', runs: 1 }, { type: 'SINGLE', runs: 1 }, { type: 'FOUR', runs: 4 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }], contextTags: ['erratic_bowling'] },
         ],
     },
     {
@@ -320,7 +320,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 3,
         tags: ['middle', 'pressure'],
         variations: [
-            { outcomes: [{ type: 'DOT' }, { type: 'DOT' }, { type: 'DOT' }, { type: 'DOT' }, { type: 'DOT' }, { type: 'DOT' }], contextTags: ['spin_bowling'] },
+            { outcomes: [{ type: 'DOT', runs: 0 }, { type: 'DOT', runs: 0 }, { type: 'DOT', runs: 0 }, { type: 'DOT', runs: 0 }, { type: 'DOT', runs: 0 }, { type: 'DOT', runs: 0 }], contextTags: ['spin_bowling'] },
         ],
     },
     {
@@ -329,7 +329,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 5,
         tags: ['death', 'pressure'],
         variations: [
-            { outcomes: [{ type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }], contextTags: ['yorkers'] },
+            { outcomes: [{ type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }], contextTags: ['yorkers'] },
         ],
     },
     {
@@ -338,7 +338,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 3,
         tags: ['middle', 'momentum-swing'],
         variations: [
-            { outcomes: [{ type: 'WICKET', wicketType: 'CAUGHT' }, { type: 'DOT' }, { type: 'WICKET', wicketType: 'BOWLED' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }], contextTags: ['collapse'] },
+            { outcomes: [{ type: 'WICKET', wicketType: 'CAUGHT', runs: 0 }, { type: 'DOT', runs: 0 }, { type: 'WICKET', wicketType: 'BOWLED', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }], contextTags: ['collapse'] },
         ],
     },
     {
@@ -356,7 +356,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 4,
         tags: ['middle', 'momentum-swing'],
         variations: [
-            { outcomes: [{ type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'WICKET', wicketType: 'CAUGHT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }], contextTags: ['pace_bowling'] },
+            { outcomes: [{ type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'WICKET', wicketType: 'CAUGHT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }], contextTags: ['pace_bowling'] },
         ],
     },
     {
@@ -365,7 +365,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 4,
         tags: ['death', 'pressure'],
         variations: [
-            { outcomes: [{ type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'WICKET', wicketType: 'CAUGHT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }], contextTags: ['bouncer_tactic'] },
+            { outcomes: [{ type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'WICKET', wicketType: 'CAUGHT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }], contextTags: ['bouncer_tactic'] },
         ],
     },
     {
@@ -374,7 +374,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 8,
         tags: ['middle', 'normal'],
         variations: [
-            { outcomes: [{ type: 'SINGLE', runs: 1 }, { type: 'SINGLE', runs: 1 }, { type: 'SINGLE', runs: 1 }, { type: 'SINGLE', runs: 1 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }], contextTags: ['rotating_strike'] },
+            { outcomes: [{ type: 'SINGLE', runs: 1 }, { type: 'SINGLE', runs: 1 }, { type: 'SINGLE', runs: 1 }, { type: 'SINGLE', runs: 1 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }], contextTags: ['rotating_strike'] },
         ],
     },
     {
@@ -383,7 +383,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 6,
         tags: ['powerplay', 'momentum-swing'],
         variations: [
-            { outcomes: [{ type: 'SIX', runs: 6 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'FOUR', runs: 4 }, { type: 'DOT' }], contextTags: ['attacking_batting'] },
+            { outcomes: [{ type: 'SIX', runs: 6 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'FOUR', runs: 4 }, { type: 'DOT', runs: 0 }], contextTags: ['attacking_batting'] },
         ],
     },
     {
@@ -392,7 +392,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 5,
         tags: ['middle', 'momentum-swing'],
         variations: [
-            { outcomes: [{ type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'WICKET', wicketType: 'STUMPED' }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }], contextTags: ['spin_bowling'] },
+            { outcomes: [{ type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'WICKET', wicketType: 'STUMPED', runs: 0 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }], contextTags: ['spin_bowling'] },
         ],
     },
     {
@@ -401,7 +401,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 4,
         tags: ['death', 'momentum-swing'],
         variations: [
-            { outcomes: [{ type: 'FOUR', runs: 4 }, { type: 'SINGLE', runs: 1 }, { type: 'FOUR', runs: 4 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'SIX', runs: 6 }], contextTags: ['fielding_error'] },
+            { outcomes: [{ type: 'FOUR', runs: 4 }, { type: 'SINGLE', runs: 1 }, { type: 'FOUR', runs: 4 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'SIX', runs: 6 }], contextTags: ['fielding_error'] },
         ],
     },
     {
@@ -410,7 +410,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 7,
         tags: ['middle', 'pressure'],
         variations: [
-            { outcomes: [{ type: 'DOT' }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }], contextTags: ['tight_bowling'] },
+            { outcomes: [{ type: 'DOT', runs: 0 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }], contextTags: ['tight_bowling'] },
         ],
     },
     {
@@ -419,7 +419,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 7,
         tags: ['powerplay', 'pressure'],
         variations: [
-            { outcomes: [{ type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }], contextTags: ['tight_bowling'] },
+            { outcomes: [{ type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }], contextTags: ['tight_bowling'] },
         ],
     },
     {
@@ -428,7 +428,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 5,
         tags: ['death', 'momentum-swing'],
         variations: [
-            { outcomes: [{ type: 'WICKET', wicketType: 'CAUGHT' }, { type: 'SIX', runs: 6 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }], contextTags: ['mixed_momentum'] },
+            { outcomes: [{ type: 'WICKET', wicketType: 'CAUGHT', runs: 0 }, { type: 'SIX', runs: 6 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }], contextTags: ['mixed_momentum'] },
         ],
     },
     {
@@ -437,7 +437,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 4,
         tags: ['middle'],
         variations: [
-            { outcomes: [{ type: 'WIDE', runs: 1 }, { type: 'SINGLE', runs: 1 }, { type: 'NO_BALL', runs: 1 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }], contextTags: ['erratic_bowling'] },
+            { outcomes: [{ type: 'WIDE', runs: 1 }, { type: 'SINGLE', runs: 1 }, { type: 'NO_BALL', runs: 1 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }], contextTags: ['erratic_bowling'] },
         ],
     },
     {
@@ -446,7 +446,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 5,
         tags: ['death', 'momentum-swing'],
         variations: [
-            { outcomes: [{ type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'WICKET', wicketType: 'CAUGHT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }], contextTags: ['slower_ball'] },
+            { outcomes: [{ type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'WICKET', wicketType: 'CAUGHT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }], contextTags: ['slower_ball'] },
         ],
     },
     {
@@ -455,7 +455,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 6,
         tags: ['powerplay', 'pressure'],
         variations: [
-            { outcomes: [{ type: 'DOT' }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }], contextTags: ['tight_bowling'] },
+            { outcomes: [{ type: 'DOT', runs: 0 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }], contextTags: ['tight_bowling'] },
         ],
     },
     {
@@ -464,7 +464,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 4,
         tags: ['middle', 'momentum-swing'],
         variations: [
-            { outcomes: [{ type: 'SIX', runs: 6 }, { type: 'SIX', runs: 6 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'FOUR', runs: 4 }, { type: 'DOT' }], contextTags: ['aggressive_batting'] },
+            { outcomes: [{ type: 'SIX', runs: 6 }, { type: 'SIX', runs: 6 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'FOUR', runs: 4 }, { type: 'DOT', runs: 0 }], contextTags: ['aggressive_batting'] },
         ],
     },
     {
@@ -473,7 +473,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 4,
         tags: ['death', 'pressure'],
         variations: [
-            { outcomes: [{ type: 'WIDE', runs: 1 }, { type: 'WICKET', wicketType: 'CAUGHT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }], contextTags: ['erratic_bowling'] },
+            { outcomes: [{ type: 'WIDE', runs: 1 }, { type: 'WICKET', wicketType: 'CAUGHT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }], contextTags: ['erratic_bowling'] },
         ],
     },
     {
@@ -482,7 +482,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 6,
         tags: ['middle', 'momentum-swing'],
         variations: [
-            { outcomes: [{ type: 'FOUR', runs: 4 }, { type: 'SINGLE', runs: 1 }, { type: 'SIX', runs: 6 }, { type: 'SINGLE', runs: 1 }, { type: 'FOUR', runs: 4 }, { type: 'DOT' }], contextTags: ['attacking_batting'] },
+            { outcomes: [{ type: 'FOUR', runs: 4 }, { type: 'SINGLE', runs: 1 }, { type: 'SIX', runs: 6 }, { type: 'SINGLE', runs: 1 }, { type: 'FOUR', runs: 4 }, { type: 'DOT', runs: 0 }], contextTags: ['attacking_batting'] },
         ],
     },
     {
@@ -491,7 +491,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 5,
         tags: ['powerplay', 'momentum-swing'],
         variations: [
-            { outcomes: [{ type: 'FOUR', runs: 4 }, { type: 'SINGLE', runs: 1 }, { type: 'FOUR', runs: 4 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'SINGLE', runs: 1 }], contextTags: ['fielding_error'] },
+            { outcomes: [{ type: 'FOUR', runs: 4 }, { type: 'SINGLE', runs: 1 }, { type: 'FOUR', runs: 4 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'SINGLE', runs: 1 }], contextTags: ['fielding_error'] },
         ],
     },
     {
@@ -500,7 +500,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 7,
         tags: ['middle', 'pressure'],
         variations: [
-            { outcomes: [{ type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }], contextTags: ['spin_bowling'] },
+            { outcomes: [{ type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }], contextTags: ['spin_bowling'] },
         ],
     },
     {
@@ -509,7 +509,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 5,
         tags: ['death', 'momentum-swing'],
         variations: [
-            { outcomes: [{ type: 'SIX', runs: 6 }, { type: 'WICKET', wicketType: 'CAUGHT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }], contextTags: ['mixed_momentum'] },
+            { outcomes: [{ type: 'SIX', runs: 6 }, { type: 'WICKET', wicketType: 'CAUGHT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }], contextTags: ['mixed_momentum'] },
         ],
     },
     {
@@ -518,7 +518,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 8,
         tags: ['middle', 'normal'],
         variations: [
-            { outcomes: [{ type: 'SINGLE', runs: 1 }, { type: 'SINGLE', runs: 1 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'SINGLE', runs: 1 }], contextTags: ['rotating_strike'] },
+            { outcomes: [{ type: 'SINGLE', runs: 1 }, { type: 'SINGLE', runs: 1 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'SINGLE', runs: 1 }], contextTags: ['rotating_strike'] },
         ],
     },
     {
@@ -527,7 +527,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 7,
         tags: ['powerplay', 'normal'],
         variations: [
-            { outcomes: [{ type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }], contextTags: ['cautious_batting'] },
+            { outcomes: [{ type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }], contextTags: ['cautious_batting'] },
         ],
     },
     {
@@ -536,7 +536,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 3,
         tags: ['middle', 'momentum-swing'],
         variations: [
-            { outcomes: [{ type: 'WICKET', wicketType: 'STUMPED' }, { type: 'SINGLE', runs: 1 }, { type: 'WICKET', wicketType: 'LBW' }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }], contextTags: ['spin_bowling'] },
+            { outcomes: [{ type: 'WICKET', wicketType: 'STUMPED', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'WICKET', wicketType: 'LBW', runs: 0 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }], contextTags: ['spin_bowling'] },
         ],
     },
     {
@@ -545,7 +545,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 4,
         tags: ['death'],
         variations: [
-            { outcomes: [{ type: 'WIDE', runs: 1 }, { type: 'SINGLE', runs: 1 }, { type: 'NO_BALL', runs: 1 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }], contextTags: ['erratic_bowling'] },
+            { outcomes: [{ type: 'WIDE', runs: 1 }, { type: 'SINGLE', runs: 1 }, { type: 'NO_BALL', runs: 1 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }], contextTags: ['erratic_bowling'] },
         ],
     },
     {
@@ -554,7 +554,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 5,
         tags: ['middle', 'momentum-swing'],
         variations: [
-            { outcomes: [{ type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'WICKET', wicketType: 'CAUGHT' }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }], contextTags: ['slower_ball'] },
+            { outcomes: [{ type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'WICKET', wicketType: 'CAUGHT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }], contextTags: ['slower_ball'] },
         ],
     },
     {
@@ -563,7 +563,7 @@ export const overPatterns: OverPattern[] = [
         baseWeight: 4,
         tags: ['powerplay', 'momentum-swing'],
         variations: [
-            { outcomes: [{ type: 'SIX', runs: 6 }, { type: 'SIX', runs: 6 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT' }, { type: 'SINGLE', runs: 1 }, { type: 'FOUR', runs: 4 }], contextTags: ['attacking_batting'] },
+            { outcomes: [{ type: 'SIX', runs: 6 }, { type: 'SIX', runs: 6 }, { type: 'SINGLE', runs: 1 }, { type: 'DOT', runs: 0 }, { type: 'SINGLE', runs: 1 }, { type: 'FOUR', runs: 4 }], contextTags: ['attacking_batting'] },
         ],
     },
 ];

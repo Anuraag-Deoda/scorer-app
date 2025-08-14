@@ -4,17 +4,12 @@ import { useState, useEffect } from "react";
 import type { Match, BallEvent, Team, BallDetails, GenerateMatchCommentaryInput, FielderPlacement } from "@/types"
 import { processBall, undoLastBall, updateFieldPlacements, getMatchSituation, getPowerplayOvers } from "@/lib/cricket-logic"
 import { generateMatchCommentary } from "@/ai/flows/generate-match-commentary";
-import { Button } from "@/components/ui/button"
-import { SimulationEngine } from "@/simulation/engine";
-import { RuleBasedStrategy } from "@/simulation/strategies/rule-based-strategy";
-import { TemplateStrategy } from "@/simulation/strategies/template-strategy";
-import { AiStrategy } from "@/simulation/strategies/ai-strategy";
-import { StatisticalStrategy } from "@/simulation/strategies/statistical-strategy";
-import { CacheStrategy } from "@/simulation/strategies/cache-strategy";
-import { analyzeContext } from "@/simulation/context-analyzer";
+import { Button } from "../components/ui/button"
 import { BallOutcome } from "@/simulation/types";
+import { motion } from "framer-motion";
+import { PieChart } from "lucide-react";
 import { Prisma } from "@prisma/client";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card"
 import Scoreboard from "./scoreboard"
 import { Separator } from "./ui/separator"
 import CommentaryGenerator from "./commentary-generator"
@@ -166,61 +161,20 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
     setIsSimulating(true);
 
     try {
-      // 1. Set up the simulation engine
-      const simulationEngine = new SimulationEngine([
-        new CacheStrategy(),
-        new AiStrategy(7, aiAggression),
-        new StatisticalStrategy(),
-        new TemplateStrategy(),
-        new RuleBasedStrategy(),
-      ]);
+      const response = await fetch('/api/simulate-over', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ match, aiAggression }),
+      });
 
-      // 2. Create the match context
-      // This is a bit tricky because the client-side Match type is different from the Prisma one.
-      // We need to create a mock Prisma-like object for the context analyzer.
-      // This should be refactored later to have a unified data model.
-      const mockMatchForContext = {
-        ...match,
-        id: 0,
-        date: new Date(),
-        team1Id: match.teams[0].id,
-        team2Id: match.teams[1].id,
-        tossWinnerId: match.teams.find(t => t.name === match.toss.winner)?.id ?? 0,
-        innings: match.innings.map(inning => ({
-          id: 0,
-          matchId: 0,
-          battingTeamId: inning.battingTeam.id,
-          bowlingTeamId: inning.bowlingTeam.id,
-          score: inning.score,
-          wickets: inning.wickets,
-          overs: inning.overs,
-          balls: [], // Placeholder
-        })),
-      };
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to simulate over');
+      }
 
-      const mockCurrentInningsForContext = {
-        id: 0,
-        matchId: 0,
-        battingTeamId: currentInnings.battingTeam.id,
-        bowlingTeamId: currentInnings.bowlingTeam.id,
-        score: currentInnings.score,
-        wickets: currentInnings.wickets,
-        overs: currentInnings.overs,
-        balls: [], // Placeholder
-      };
-
-      const context = analyzeContext(
-        mockMatchForContext as any, // Using 'any' to bridge the type gap for now
-        mockCurrentInningsForContext as any,
-        currentInnings.battingTeam as any,
-        currentInnings.bowlingTeam as any,
-        onStrikeBatsman as any,
-        nonStrikeBatsman as any,
-        currentBowler as any
-      );
-
-      // 3. Run the simulation
-      const result = await simulationEngine.simulateOver(context);
+      const result = await response.json();
 
       toast({
         title: `Simulation Complete (${result.debug.pattern || result.debug.flow})`,
@@ -480,22 +434,75 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
             </div>
             <Separator className="my-4"/>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-left text-sm">
-                <div className="bg-card p-3 rounded-md">
-                    <p className="font-semibold truncate text-primary">{onStrikeBatsman?.name}{onStrikeBatsman?.id === currentInnings.batsmanOnStrike ? '*' : ''}</p>
+                <motion.div 
+                  className="bg-card p-3 rounded-md shadow-sm border border-border/50"
+                  whileHover={{ scale: 1.02 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 10 }}
+                >
+                    <div className="flex items-center gap-1">
+                      <div className="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
+                      <p className="font-semibold truncate text-primary">{onStrikeBatsman?.name}{onStrikeBatsman?.id === currentInnings.batsmanOnStrike ? '*' : ''}</p>
+                    </div>
                     <p className="text-muted-foreground text-xs">{onStrikeBatsman?.batting.runs} ({onStrikeBatsman?.batting.ballsFaced})</p>
-                </div>
-                <div className="bg-card p-3 rounded-md">
+                    <div className="mt-1 h-1 bg-muted rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-primary" 
+                        style={{ width: `${Math.min((onStrikeBatsman?.batting.runs || 0) / 50 * 100, 100)}%` }}
+                      ></div>
+                    </div>
+                </motion.div>
+                <motion.div 
+                  className="bg-card p-3 rounded-md shadow-sm border border-border/50"
+                  whileHover={{ scale: 1.02 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 10 }}
+                >
                      <p className="font-semibold truncate">{nonStrikeBatsman?.name}</p>
                      <p className="text-muted-foreground text-xs">{nonStrikeBatsman?.batting.runs} ({nonStrikeBatsman?.batting.ballsFaced})</p>
-                </div>
-                 <div className="bg-card p-3 rounded-md">
-                    <p className="font-semibold truncate text-primary">{currentBowler?.name || 'N/A'}</p>
-                     {currentBowler ? <p className="text-muted-foreground text-xs">{currentBowler?.bowling.wickets}/{currentBowler?.bowling.runsConceded} ({Math.floor(currentBowler?.bowling.ballsBowled/6)}.{currentBowler?.bowling.ballsBowled % 6})</p> : <p className="text-muted-foreground text-xs">Overs: {currentInnings.overs}</p>}
-                </div>
-                 <div className="bg-card p-3 rounded-md">
-                    <p className="font-semibold">Partnership</p>
+                     <div className="mt-1 h-1 bg-muted rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-muted-foreground" 
+                        style={{ width: `${Math.min((nonStrikeBatsman?.batting.runs || 0) / 50 * 100, 100)}%` }}
+                      ></div>
+                    </div>
+                </motion.div>
+                 <motion.div 
+                  className="bg-card p-3 rounded-md shadow-sm border border-border/50"
+                  whileHover={{ scale: 1.02 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 10 }}
+                >
+                    <div className="flex items-center gap-1">
+                      <div className="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
+                      <p className="font-semibold truncate text-primary">{currentBowler?.name || 'N/A'}</p>
+                    </div>
+                     {currentBowler ? 
+                      <>
+                        <p className="text-muted-foreground text-xs">{currentBowler?.bowling.wickets}/{currentBowler?.bowling.runsConceded} ({Math.floor(currentBowler?.bowling.ballsBowled/6)}.{currentBowler?.bowling.ballsBowled % 6})</p>
+                        <div className="mt-1 h-1 bg-muted rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-destructive" 
+                            style={{ width: `${Math.min((currentBowler?.bowling.wickets || 0) / 3 * 100, 100)}%` }}
+                          ></div>
+                        </div>
+                      </> : 
+                      <p className="text-muted-foreground text-xs">Select bowler</p>}
+                </motion.div>
+                 <motion.div 
+                  className="bg-card p-3 rounded-md shadow-sm border border-border/50"
+                  whileHover={{ scale: 1.02 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 10 }}
+                >
+                    <div className="flex items-center gap-1">
+                      <PieChart className="w-4 h-4 text-muted-foreground" />
+                      <p className="font-semibold">Partnership</p>
+                    </div>
                     <p className="text-muted-foreground text-xs">{currentInnings.currentPartnership.runs} ({currentInnings.currentPartnership.balls})</p>
-                </div>
+                    <div className="mt-1 h-1 bg-muted rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-[hsl(var(--chart-2))]" 
+                        style={{ width: `${Math.min((currentInnings.currentPartnership.runs || 0) / 50 * 100, 100)}%` }}
+                      ></div>
+                    </div>
+                </motion.div>
             </div>
              {match.status === 'finished' && (
               <div className="mt-6">

@@ -83,17 +83,36 @@ export default function NewMatchForm({ onNewMatch }: NewMatchFormProps) {
     form.setValue('matchType', value);
   };
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    const settings: MatchSettings = {
-      teamNames: [values.team1Name, values.team2Name],
-      oversPerInnings: values.overs,
-      toss: {
-        winner: values.tossWinner === 'team1' ? values.team1Name : values.team2Name,
-        decision: values.decision,
-      },
-      matchType: values.matchType,
-    };
-    onNewMatch(settings);
+  async function onSubmit(values: z.infer<typeof formSchema>) {
+    try {
+      const response = await fetch('/api/special-players');
+      const specialPlayerIds = await response.json();
+
+      const settings: MatchSettings = {
+        teamNames: [values.team1Name, values.team2Name],
+        oversPerInnings: values.overs,
+        toss: {
+          winner: values.tossWinner === 'team1' ? values.team1Name : values.team2Name,
+          decision: values.decision,
+        },
+        matchType: values.matchType,
+        specialPlayerIds,
+      };
+      onNewMatch(settings);
+    } catch (error) {
+      console.error("Failed to fetch special player IDs", error);
+      // Fallback for offline mode
+      const settings: MatchSettings = {
+        teamNames: [values.team1Name, values.team2Name],
+        oversPerInnings: values.overs,
+        toss: {
+          winner: values.tossWinner === 'team1' ? values.team1Name : values.team2Name,
+          decision: values.decision,
+        },
+        matchType: values.matchType,
+      };
+      onNewMatch(settings);
+    }
   }
 
   return (

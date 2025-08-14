@@ -18,6 +18,7 @@ export interface CricketContext {
   phase: MatchPhase;
   complexity: number; // Scale of 1-10
   lastPatternId?: string;
+  specialPlayerIds?: any;
 }
 
 // Metrics to quantify pressure on the batting side
@@ -57,12 +58,12 @@ export interface OverSimulationResult {
 
 // Represents the outcome of a single ball
 export type BallOutcome =
-  | { type: 'DOT' }
+  | { type: 'DOT'; runs: 0 }
   | { type: 'SINGLE'; runs: 1 }
   | { type: 'DOUBLE'; runs: 2 }
   | { type: 'FOUR'; runs: 4 }
   | { type: 'SIX'; runs: 6 }
-  | { type: 'WICKET'; wicketType: WicketType }
+  | { type: 'WICKET'; wicketType: WicketType; runs: 0 }
   | { type: 'WIDE'; runs: 1 }
   | { type: 'NO_BALL'; runs: 1 }
   | { type: 'BYE'; runs: 1 }

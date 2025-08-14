@@ -150,6 +150,11 @@ export default function ManagePlayersDialog({
           setLocalTeams(JSON.parse(JSON.stringify(match.teams)));
         }
       }).catch(() => {
+        toast({
+          variant: "destructive",
+          title: "Failed to fetch teams",
+          description: "Using local match data as a fallback.",
+        });
         setLocalTeams(JSON.parse(JSON.stringify(match.teams)));
       });
     }
@@ -179,6 +184,7 @@ export default function ManagePlayersDialog({
           const playerOut = team.players[playerOutIndex];
           
           playerIn.isSubstitute = false;
+          playerIn.batting.status = 'not out';
           playerOut.isSubstitute = true;
           playerOut.batting.status = 'did not bat';
           
@@ -204,6 +210,7 @@ export default function ManagePlayersDialog({
           if (playerIn && playerOut) {
               playerIn.isSubstitute = false;
               playerIn.isImpactPlayer = true;
+              playerIn.batting.status = 'not out';
               playerOut.isSubstitute = true;
               playerOut.batting.status = 'did not bat';
               team.impactPlayerUsed = true;
@@ -246,22 +253,15 @@ export default function ManagePlayersDialog({
 
     // Propagate player name changes to innings objects
     newMatch.innings.forEach((inning: any) => {
-        [inning.battingTeam, inning.bowlingTeam].forEach((teamInInning: Team) => {
-            const correspondingTeamFromState = newMatch.teams.find((t: Team) => t.id === teamInInning.id);
-            if (correspondingTeamFromState) {
-                teamInInning.name = correspondingTeamFromState.name;
-                teamInInning.impactPlayerUsed = correspondingTeamFromState.impactPlayerUsed;
+        const battingTeamFromState = newMatch.teams.find((t: Team) => t.id === inning.battingTeam.id);
+        if (battingTeamFromState) {
+            inning.battingTeam = JSON.parse(JSON.stringify(battingTeamFromState));
+        }
 
-                teamInInning.players.forEach((player: Player) => {
-                    const correspondingPlayerFromState = correspondingTeamFromState.players.find((p: Player) => p.id === player.id);
-                    if (correspondingPlayerFromState) {
-                        player.name = correspondingPlayerFromState.name;
-                        player.isSubstitute = correspondingPlayerFromState.isSubstitute;
-                        player.isImpactPlayer = correspondingPlayerFromState.isImpactPlayer;
-                    }
-                });
-            }
-        });
+        const bowlingTeamFromState = newMatch.teams.find((t: Team) => t.id === inning.bowlingTeam.id);
+        if (bowlingTeamFromState) {
+            inning.bowlingTeam = JSON.parse(JSON.stringify(bowlingTeamFromState));
+        }
     });
 
     setMatch(newMatch);

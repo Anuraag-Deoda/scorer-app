@@ -6,7 +6,8 @@ import {
   WicketType,
 } from '../types';
 import { simulateOver } from '../../ai/flows/simulate-over';
-import { SimulateOverOutputSchema } from '@/types';
+import { runFlow } from '@genkit-ai/flow';
+import { SimulateOverOutputSchema } from '../../types';
 
 export class AiStrategy implements SimulationStrategy {
   public name = 'AI';
@@ -24,7 +25,7 @@ export class AiStrategy implements SimulationStrategy {
   }
 
   public async simulate(context: CricketContext): Promise<OverSimulationResult> {
-    const overResult = await simulateOver({
+    const overResult = await runFlow(simulateOver, {
         matchContext: this.createMatchContext(context),
         bowlingTeamPlayerIds: context.bowlingTeam.players.map(p => p.id).join(','),
     });
@@ -33,10 +34,10 @@ export class AiStrategy implements SimulationStrategy {
 
     const outcomes: BallOutcome[] = parsedResult.over.map((ball) => {
         if (ball.event === 'w') {
-            return { type: 'WICKET', wicketType: ball.wicketType as WicketType };
+            return { type: 'WICKET', wicketType: ball.wicketType as WicketType, runs: 0 };
         }
         if (ball.event === 'run') {
-            if (ball.runs === 0) return { type: 'DOT' };
+            if (ball.runs === 0) return { type: 'DOT', runs: 0 };
             if (ball.runs === 1) return { type: 'SINGLE', runs: 1 };
             if (ball.runs === 2) return { type: 'DOUBLE', runs: 2 };
             if (ball.runs === 4) return { type: 'FOUR', runs: 4 };
@@ -46,7 +47,7 @@ export class AiStrategy implements SimulationStrategy {
         if (ball.event === 'nb') return { type: 'NO_BALL', runs: 1 };
         
         // Fallback for byes/leg-byes, treat as dots for now
-        return { type: 'DOT' };
+        return { type: 'DOT', runs: 0 };
     });
 
     return {

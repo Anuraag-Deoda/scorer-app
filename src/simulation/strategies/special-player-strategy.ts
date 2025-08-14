@@ -71,7 +71,7 @@ private simulateAnuraagBatting(): BallOutcome {
   // Star batter: rare wicket, fewer sixes, lots of 1s/2s
   const r = Math.random();
 
-  if (r < 0.008) return { type: 'WICKET', wicketType: 'CAUGHT', runs: 0 }; // 0.8%
+  if (r < 0.08) return { type: 'WICKET', wicketType: 'CAUGHT', runs: 0 }; // 0.8%
   if (r < 0.148) return { type: 'SIX', runs: 6 };                           // +4.0%
   if (r < 0.188) return { type: 'FOUR', runs: 4 };                      // +3.0%  (=21.8)
   if (r < 0.498) return { type: 'DOUBLE', runs: 2 };                        // +28.0% (=49.8)
@@ -84,6 +84,7 @@ private simulatePrashantBatting(): BallOutcome {
   const rand = Math.random();
 
   if (rand < 0.35) return { type: 'WICKET', wicketType: 'BOWLED', runs: 0 }; // 35% wicket
+    //if (rand < 0.148) return { type: 'SIX', runs: 6 };   
   if (rand < 0.60) return { type: 'DOT', runs: 0 };                           // 25% dot
   if (rand < 0.80) return { type: 'SINGLE', runs: 1 };                        // 20% single
   if (rand < 0.90) return { type: 'DOUBLE', runs: 2 };                        // 10% double
@@ -113,9 +114,10 @@ private simulatePrashantBatting(): BallOutcome {
   private simulateHarshalBowling(): BallOutcome {
     // Harshal: Second best bowler
     const rand = Math.random();
-    if (rand < 0.15) return { type: 'WICKET', wicketType: 'CAUGHT', runs: 0 };
-    if (rand < 0.5) return { type: 'DOT', runs: 0 };
-    if (rand < 0.8) return { type: 'SINGLE', runs: 1 };
+    if (rand < 0.2) return { type: 'WICKET', wicketType: 'BOWLED', runs: 0 };
+    if (rand < 0.6) return { type: 'DOT', runs: 0 };
+    if (rand < 0.9) return { type: 'SINGLE', runs: 1 };
+    if (rand < 0.5) return { type: 'SIX', runs: 6 };
     return { type: 'FOUR', runs: 4 };
   }
 
@@ -123,14 +125,11 @@ private simulatePrashantBowling(): BallOutcome {
   // Prashant: weak bowler — rare wickets, lots of runs in singles/doubles/boundaries
   const r = Math.random();
 
-  if (r < 0.02) return { type: 'WICKET', wicketType: 'CAUGHT', runs: 0 }; // 2% wicket
-  if (r < 0.14) return { type: 'SIX', runs: 6 };                           // 12%
-  if (r < 0.34) return { type: 'FOUR', runs: 4 };                          // 20%
+  if (r < 0.2) return { type: 'WICKET', wicketType: 'CAUGHT', runs: 0 }; // 2% wicket
+  if (r < 0.04) return { type: 'SIX', runs: 6 };                           // 12%
+  if (r < 0.04) return { type: 'FOUR', runs: 4 };                          // 20%
   if (r < 0.50) return { type: 'DOUBLE', runs: 2 };                        // 16%
   if (r < 0.80) return { type: 'SINGLE', runs: 1 };                        // 30%
   return { type: 'DOT', runs: 0 };                                         // 20%
 }
 }
-
-
-

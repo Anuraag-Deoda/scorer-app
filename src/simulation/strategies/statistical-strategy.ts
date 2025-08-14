@@ -80,7 +80,7 @@ export class StatisticalStrategy implements SimulationStrategy {
     const totalProb = Object.values(baseProbs).reduce((sum, p) => sum! + p!, 0);
     if (totalProb === 0) {
         // This should not happen, but as a fallback, return a dot ball.
-        return { type: 'DOT' };
+        return { type: 'DOT', runs: 0 };
     }
     const normalizedProbs = Object.entries(baseProbs).reduce((acc, [key, value]) => {
         acc[key as BallOutcome['type']] = Math.max(0, value!) / totalProb; // Ensure no negative probabilities
@@ -96,14 +96,14 @@ export class StatisticalStrategy implements SimulationStrategy {
       if (random < cumulativeProb) {
         const type = key as BallOutcome['type'];
         switch (type) {
-          case 'DOT': return { type };
+          case 'DOT': return { type, runs: 0 };
           case 'SINGLE': return { type, runs: 1 };
           case 'DOUBLE': return { type, runs: 2 };
           case 'FOUR': return { type, runs: 4 };
           case 'SIX': return { type, runs: 6 };
           case 'WICKET':
             const wicketTypes: WicketType[] = ['BOWLED', 'CAUGHT', 'LBW'];
-            return { type, wicketType: wicketTypes[Math.floor(Math.random() * wicketTypes.length)] };
+            return { type, wicketType: wicketTypes[Math.floor(Math.random() * wicketTypes.length)], runs: 0 };
           case 'WIDE': return { type, runs: 1 };
           case 'NO_BALL': return { type, runs: 1 };
           case 'BYE': return { type, runs: 1 };
@@ -112,6 +112,6 @@ export class StatisticalStrategy implements SimulationStrategy {
       }
     }
 
-    return { type: 'DOT' }; // Fallback
+    return { type: 'DOT', runs: 0 }; // Fallback
   }
 }
