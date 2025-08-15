@@ -35,18 +35,24 @@ const formSchema = z.object({
 
 type NewMatchFormProps = {
   onNewMatch: (settings: MatchSettings) => void;
+  prefillSettings?: {
+    teamNames: [string, string];
+    oversPerInnings: number;
+    toss: { winner: string; decision: 'bat' | 'bowl' };
+    matchType: MatchType;
+  };
 };
 
-export default function NewMatchForm({ onNewMatch }: NewMatchFormProps) {
+export default function NewMatchForm({ onNewMatch, prefillSettings }: NewMatchFormProps) {
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      team1Name: 'Team A',
-      team2Name: 'Team B',
-      overs: 20,
-      tossWinner: 'team1',
-      decision: 'bat',
-      matchType: MatchType.T20,
+      team1Name: prefillSettings?.teamNames[0] || 'Team A',
+      team2Name: prefillSettings?.teamNames[1] || 'Team B',
+      overs: prefillSettings?.oversPerInnings || 20,
+      tossWinner: prefillSettings?.toss.winner === prefillSettings?.teamNames[0] ? 'team1' : 'team2',
+      decision: prefillSettings?.toss.decision || 'bat',
+      matchType: prefillSettings?.matchType || MatchType.T20,
     },
   });
 
@@ -98,10 +104,11 @@ export default function NewMatchForm({ onNewMatch }: NewMatchFormProps) {
         matchType: values.matchType,
         specialPlayerIds,
       };
+
       onNewMatch(settings);
     } catch (error) {
-      console.error("Failed to fetch special player IDs", error);
-      // Fallback for offline mode
+      console.error('Failed to fetch special players:', error);
+      // Fallback without special players
       const settings: MatchSettings = {
         teamNames: [values.team1Name, values.team2Name],
         oversPerInnings: values.overs,
@@ -116,132 +123,150 @@ export default function NewMatchForm({ onNewMatch }: NewMatchFormProps) {
   }
 
   return (
-    <div>
-      <h2 className="text-2xl font-headline font-bold text-center mb-4">Start New Match</h2>
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FormField
-              control={form.control}
-              name="team1Name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Team 1 Name</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Enter team 1 name" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="team2Name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Team 2 Name</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Enter team 2 name" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="team1Name"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Team 1 Name</FormLabel>
+                <FormControl>
+                  <Input 
+                    placeholder="Enter team 1 name" 
+                    {...field} 
+                    disabled={!!prefillSettings}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="team2Name"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Team 2 Name</FormLabel>
+                <FormControl>
+                  <Input 
+                    placeholder="Enter team 2 name" 
+                    {...field} 
+                    disabled={!!prefillSettings}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="overs"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Overs per Innings</FormLabel>
+                <FormControl>
+                  <Input 
+                    type="number" 
+                    placeholder="20" 
+                    {...field} 
+                    disabled={!!prefillSettings}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
           <FormField
             control={form.control}
             name="matchType"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Match Type</FormLabel>
-                <Select onValueChange={(value: MatchType) => handleMatchTypeChange(value)} defaultValue={field.value}>
+                <Select onValueChange={handleMatchTypeChange} value={field.value} disabled={!!prefillSettings}>
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Select match type" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {Object.values(MatchType).map((type) => (
-                      <SelectItem key={type} value={type}>{type}</SelectItem>
-                    ))}
+                    <SelectItem value={MatchType.T20}>T20</SelectItem>
+                    <SelectItem value={MatchType.TenOvers}>10 Overs</SelectItem>
+                    <SelectItem value={MatchType.FiveOvers}>5 Overs</SelectItem>
+                    <SelectItem value={MatchType.TwoOvers}>2 Overs</SelectItem>
+                    <SelectItem value={MatchType.FiftyOvers}>50 Overs</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
               </FormItem>
             )}
           />
-          <FormField
-            control={form.control}
-            name="overs"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Overs</FormLabel>
-                <FormControl>
-                  <Input type="number" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+        </div>
+
+        <Separator />
+
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold">Toss</h3>
+            <Button type="button" variant="outline" onClick={handleRandomizeToss}>
+              Randomize Toss
+            </Button>
           </div>
 
-          <Separator />
-          
-          <div className="space-y-2">
-            <div className="flex justify-between items-center">
-              <Label className="font-headline">Toss</Label>
-              <Button type="button" variant="outline" size="sm" onClick={handleRandomizeToss}>Randomize</Button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-               <FormField
-                  control={form.control}
-                  name="tossWinner"
-                  render={({ field }) => (
-                    <FormItem>
-                       <FormLabel>Winner</FormLabel>
-                       <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select toss winner" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="team1">{team1Name || 'Team 1'}</SelectItem>
-                            <SelectItem value="team2">{team2Name || 'Team 2'}</SelectItem>
-                          </SelectContent>
-                       </Select>
-                       <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                 <FormField
-                  control={form.control}
-                  name="decision"
-                  render={({ field }) => (
-                    <FormItem>
-                       <FormLabel>Decision</FormLabel>
-                       <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select decision" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="bat">Bat</SelectItem>
-                            <SelectItem value="bowl">Bowl</SelectItem>
-                          </SelectContent>
-                       </Select>
-                       <FormMessage />
-                    </FormItem>
-                  )}
-                />
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FormField
+              control={form.control}
+              name="tossWinner"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Toss Winner</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select toss winner" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="team1">{team1Name}</SelectItem>
+                      <SelectItem value="team2">{team2Name}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="decision"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Decision</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select decision" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="bat">Bat</SelectItem>
+                      <SelectItem value="bowl">Bowl</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           </div>
-          
-          <Button type="submit" className="w-full" size="lg">Start Scoring</Button>
-        </form>
-      </Form>
-    </div>
+        </div>
+
+        <Button type="submit" className="w-full">
+          {prefillSettings ? 'Start Match' : 'Create Match'}
+        </Button>
+      </form>
+    </Form>
   );
 }

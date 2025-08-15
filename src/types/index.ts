@@ -234,3 +234,77 @@ export const SimulateBallOutputSchema = z.object({
     fielderId: z.number().int().optional().describe("If the dismissal involved a fielder (Caught, Run Out), their player ID."),
 });
 export type SimulateBallOutput = z.infer<typeof SimulateBallOutputSchema>;
+
+export interface PlayerStats {
+  playerId: number;
+  playerName: string;
+  teamId: number;
+  teamName: string;
+  matches: number;
+  runs: number;
+  ballsFaced: number;
+  fours: number;
+  sixes: number;
+  wickets: number;
+  ballsBowled: number;
+  runsConceded: number;
+  maidens: number;
+  average: number;
+  strikeRate: number;
+  economyRate: number;
+  bestBowling?: string;
+  bestBatting?: number;
+}
+
+export interface TournamentTeam {
+  id: number;
+  name: string;
+  logo?: string; // SVG logo URL
+  players: number[]; // Array of player IDs
+  points: number;
+  matchesPlayed: number;
+  matchesWon: number;
+  matchesLost: number;
+  matchesTied: number;
+  netRunRate: number;
+  runsScored: number;
+  runsConceded: number;
+  oversFaced: number;
+  oversBowled: number;
+}
+
+export interface TournamentMatch {
+  id: string;
+  tournamentId: string;
+  team1Id: number;
+  team2Id: number;
+  team1Name: string;
+  team2Name: string;
+  matchNumber: number;
+  round: 'group' | 'final';
+  status: 'pending' | 'inprogress' | 'finished';
+  result?: string;
+  matchData?: Match; // Full match data for statistics
+  scheduledDate?: Date;
+  completedDate?: Date;
+}
+
+export interface Tournament {
+  id: string;
+  name: string;
+  description?: string;
+  numberOfTeams: number;
+  teams: TournamentTeam[];
+  matches: TournamentMatch[];
+  status: 'draft' | 'active' | 'completed';
+  startDate?: Date;
+  endDate?: Date;
+  createdDate: Date;
+  updatedDate: Date;
+  settings: {
+    oversPerInnings: number;
+    matchType: MatchType;
+    groupStageRounds: number; // How many times teams play each other
+    topTeamsAdvance: number; // How many teams advance to finals
+  };
+}
