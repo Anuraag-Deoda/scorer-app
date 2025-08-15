@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Trophy, Users, Calendar, Play, CheckCircle } from 'lucide-react';
 import type { Tournament } from '@/types';
+import PlayerRecordsDialog from './player-records-dialog';
 
 interface TournamentsListProps {
   tournaments: Tournament[];
@@ -55,10 +56,13 @@ export default function TournamentsList({ tournaments, onCreateTournament, onVie
           <h1 className="text-3xl font-bold">Tournaments</h1>
           <p className="text-muted-foreground">Manage and participate in cricket tournaments</p>
         </div>
-        <Button onClick={onCreateTournament} className="flex items-center gap-2">
-          <Plus className="w-4 h-4" />
-          Create Tournament
-        </Button>
+        <div className="flex items-center gap-2">
+          <PlayerRecordsDialog />
+          <Button onClick={onCreateTournament} className="flex items-center gap-2">
+            <Plus className="w-4 h-4" />
+            Create Tournament
+          </Button>
+        </div>
       </div>
 
       {tournaments.length === 0 ? (

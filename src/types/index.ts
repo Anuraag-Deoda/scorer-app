@@ -259,7 +259,8 @@ export interface PlayerStats {
 export interface TournamentTeam {
   id: number;
   name: string;
-  logo?: string; // SVG logo URL
+  logo?: string; // Team logo URL (SVG or PNG)
+  homeGround?: string;
   players: number[]; // Array of player IDs
   points: number;
   matchesPlayed: number;
@@ -281,12 +282,29 @@ export interface TournamentMatch {
   team1Name: string;
   team2Name: string;
   matchNumber: number;
-  round: 'group' | 'final';
+  round: 'group' | 'final' | 'qualifier1' | 'eliminator' | 'qualifier2';
   status: 'pending' | 'inprogress' | 'finished';
+  venue?: string; // team home ground or Neutral
   result?: string;
+  winnerTeamId?: number;
+  loserTeamId?: number;
   matchData?: Match; // Full match data for statistics
   scheduledDate?: Date;
   completedDate?: Date;
+}
+
+export interface TournamentAwards {
+  playerOfSeriesId?: number;
+  playerOfSeriesName?: string;
+  categories?: {
+    orangeCapTop5?: number[]; // playerIds by runs
+    purpleCapTop5?: number[]; // playerIds by wickets
+    bestStrikeRateTop5?: number[];
+    bestEconomyTop5?: number[];
+    bestAvgBatTop5?: number[]; // by runs per match
+    bestAvgBowlTop5?: number[]; // by wickets per match
+    explosiveTop5?: number[];
+  };
 }
 
 export interface Tournament {
@@ -307,4 +325,5 @@ export interface Tournament {
     groupStageRounds: number; // How many times teams play each other
     topTeamsAdvance: number; // How many teams advance to finals
   };
+  awards?: TournamentAwards;
 }

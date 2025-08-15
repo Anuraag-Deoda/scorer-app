@@ -12,7 +12,8 @@ import { Badge } from '@/components/ui/badge';
 import { X, Upload, Trophy } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { DEFAULT_PLAYERS } from '@/data/default-players';
-import type { Tournament, TournamentTeam, MatchType } from '@/types';
+import type { Tournament, TournamentTeam, MatchType, TournamentMatch } from '@/types';
+import { loadAllPlayerHistories } from '@/lib/player-stats-store';
 
 interface TournamentCreationFormProps {
   onTournamentCreated: (tournament: Tournament) => void;
@@ -28,6 +29,7 @@ export default function TournamentCreationForm({ onTournamentCreated, onCancel }
   const [teams, setTeams] = useState<TournamentTeam[]>([]);
   const [currentTeamName, setCurrentTeamName] = useState('');
   const [currentTeamLogo, setCurrentTeamLogo] = useState<File | null>(null);
+  const [currentTeamHomeGround, setCurrentTeamHomeGround] = useState('');
   const [selectedPlayers, setSelectedPlayers] = useState<number[]>([]);
   const { toast } = useToast();
 
@@ -39,29 +41,22 @@ export default function TournamentCreationForm({ onTournamentCreated, onCancel }
 
   const handleAddTeam = () => {
     if (!currentTeamName.trim()) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Please enter a team name.",
-      });
+      toast({ variant: "destructive", title: "Error", description: "Please enter a team name." });
+      return;
+    }
+
+    if (!currentTeamHomeGround.trim()) {
+      toast({ variant: "destructive", title: "Error", description: "Please enter a home ground." });
       return;
     }
 
     if (selectedPlayers.length === 0) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Please select at least one player for the team.",
-      });
+      toast({ variant: "destructive", title: "Error", description: "Please select at least one player for the team." });
       return;
     }
 
     if (selectedPlayers.length > 13) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "A team can have maximum 13 players.",
-      });
+      toast({ variant: "destructive", title: "Error", description: "A team can have maximum 13 players." });
       return;
     }
 
@@ -69,6 +64,7 @@ export default function TournamentCreationForm({ onTournamentCreated, onCancel }
       id: teams.length + 1,
       name: currentTeamName.trim(),
       logo: currentTeamLogo ? URL.createObjectURL(currentTeamLogo) : undefined,
+      homeGround: currentTeamHomeGround.trim(),
       players: selectedPlayers,
       points: 0,
       matchesPlayed: 0,
@@ -85,12 +81,10 @@ export default function TournamentCreationForm({ onTournamentCreated, onCancel }
     setTeams([...teams, newTeam]);
     setCurrentTeamName('');
     setCurrentTeamLogo(null);
+    setCurrentTeamHomeGround('');
     setSelectedPlayers([]);
 
-    toast({
-      title: "Team Added",
-      description: `${newTeam.name} has been added to the tournament.`,
-    });
+    toast({ title: "Team Added", description: `${newTeam.name} has been added to the tournament.` });
   };
 
   const handleRemoveTeam = (teamId: number) => {
@@ -98,29 +92,17 @@ export default function TournamentCreationForm({ onTournamentCreated, onCancel }
   };
 
   const handlePlayerToggle = (playerId: number) => {
-    setSelectedPlayers(prev => 
-      prev.includes(playerId) 
-        ? prev.filter(id => id !== playerId)
-        : [...prev, playerId]
-    );
+    setSelectedPlayers(prev => prev.includes(playerId) ? prev.filter(id => id !== playerId) : [...prev, playerId]);
   };
 
   const handleCreateTournament = () => {
     if (!tournamentName.trim()) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Please enter a tournament name.",
-      });
+      toast({ variant: "destructive", title: "Error", description: "Please enter a tournament name." });
       return;
     }
 
     if (teams.length < 2) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Please add at least 2 teams to create a tournament.",
-      });
+      toast({ variant: "destructive", title: "Error", description: "Please add at least 2 teams to create a tournament." });
       return;
     }
 
@@ -141,7 +123,7 @@ export default function TournamentCreationForm({ onTournamentCreated, onCancel }
         oversPerInnings,
         matchType,
         groupStageRounds: 3, // Each team plays each other 3 times
-        topTeamsAdvance: 2, // Top 2 teams advance to finals
+        topTeamsAdvance: teams.length > 4 ? 4 : 2, // For playoffs
       },
     };
 
@@ -149,58 +131,77 @@ export default function TournamentCreationForm({ onTournamentCreated, onCancel }
   };
 
   const generateTournamentMatches = (tournamentTeams: TournamentTeam[]) => {
-    const matches: any[] = [];
+    const matches: TournamentMatch[] = [];
     let matchNumber = 1;
 
-    // Generate group stage matches (each team plays each other 3 times)
-    for (let round = 1; round <= 3; round++) {
-      for (let i = 0; i < tournamentTeams.length; i++) {
-        for (let j = i + 1; j < tournamentTeams.length; j++) {
-          matches.push({
-            id: `match_${Date.now()}_${matchNumber}`,
-            tournamentId: `tournament_${Date.now()}`,
-            team1Id: tournamentTeams[i].id,
-            team2Id: tournamentTeams[j].id,
-            team1Name: tournamentTeams[i].name,
-            team2Name: tournamentTeams[j].name,
-            matchNumber: matchNumber++,
-            round: 'group' as const,
-            status: 'pending' as const,
-          });
-        }
+    // For each unique pair, schedule 3 matches: home1, home2, neutral
+    for (let i = 0; i < tournamentTeams.length; i++) {
+      for (let j = i + 1; j < tournamentTeams.length; j++) {
+        const teamA = tournamentTeams[i];
+        const teamB = tournamentTeams[j];
+        matches.push({
+          id: `match_${Date.now()}_${matchNumber}`,
+          tournamentId: `tournament_${Date.now()}`,
+          team1Id: teamA.id,
+          team2Id: teamB.id,
+          team1Name: teamA.name,
+          team2Name: teamB.name,
+          matchNumber: matchNumber++,
+          round: 'group',
+          venue: teamA.homeGround || 'Neutral',
+          status: 'pending',
+        });
+        matches.push({
+          id: `match_${Date.now()}_${matchNumber}`,
+          tournamentId: `tournament_${Date.now()}`,
+          team1Id: teamA.id,
+          team2Id: teamB.id,
+          team1Name: teamA.name,
+          team2Name: teamB.name,
+          matchNumber: matchNumber++,
+          round: 'group',
+          venue: teamB.homeGround || 'Neutral',
+          status: 'pending',
+        });
+        matches.push({
+          id: `match_${Date.now()}_${matchNumber}`,
+          tournamentId: `tournament_${Date.now()}`,
+          team1Id: teamA.id,
+          team2Id: teamB.id,
+          team1Name: teamA.name,
+          team2Name: teamB.name,
+          matchNumber: matchNumber++,
+          round: 'group',
+          venue: 'Neutral',
+          status: 'pending',
+        });
       }
     }
 
-    // Add final match
-    matches.push({
-      id: `match_${Date.now()}_${matchNumber}`,
-      tournamentId: `tournament_${Date.now()}`,
-      team1Id: 0, // Will be filled based on standings
-      team2Id: 0, // Will be filled based on standings
-      team1Name: 'TBD',
-      team2Name: 'TBD',
-      matchNumber: matchNumber,
-      round: 'final' as const,
-      status: 'pending' as const,
-    });
+    // Add playoffs placeholders
+    if (tournamentTeams.length > 4) {
+      matches.push({ id: `q1_${Date.now()}`, tournamentId: `tournament_${Date.now()}`, team1Id: 0, team2Id: 0, team1Name: 'TBD', team2Name: 'TBD', matchNumber: matchNumber++, round: 'qualifier1', status: 'pending', venue: 'Neutral' });
+      matches.push({ id: `elim_${Date.now()}`, tournamentId: `tournament_${Date.now()}`, team1Id: 0, team2Id: 0, team1Name: 'TBD', team2Name: 'TBD', matchNumber: matchNumber++, round: 'eliminator', status: 'pending', venue: 'Neutral' });
+      matches.push({ id: `q2_${Date.now()}`, tournamentId: `tournament_${Date.now()}`, team1Id: 0, team2Id: 0, team1Name: 'TBD', team2Name: 'TBD', matchNumber: matchNumber++, round: 'qualifier2', status: 'pending', venue: 'Neutral' });
+      matches.push({ id: `final_${Date.now()}`, tournamentId: `tournament_${Date.now()}`, team1Id: 0, team2Id: 0, team1Name: 'TBD', team2Name: 'TBD', matchNumber: matchNumber++, round: 'final', status: 'pending', venue: 'Neutral' });
+    } else {
+      matches.push({ id: `final_${Date.now()}`, tournamentId: `tournament_${Date.now()}`, team1Id: 0, team2Id: 0, team1Name: 'TBD', team2Name: 'TBD', matchNumber: matchNumber++, round: 'final', status: 'pending', venue: 'Neutral' });
+    }
 
     return matches;
   };
 
   const handleLogoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file && file.type === 'image/svg+xml') {
+    if (file && (file.type === 'image/svg+xml' || file.type === 'image/png')) {
       setCurrentTeamLogo(file);
     } else if (file) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Please upload an SVG file for the team logo.",
-      });
+      toast({ variant: "destructive", title: "Error", description: "Please upload an SVG or PNG file for the team logo." });
     }
   };
 
   const availablePlayers = getAvailablePlayers();
+  const histories = loadAllPlayerHistories();
 
   return (
     <div className="space-y-6">
@@ -215,12 +216,7 @@ export default function TournamentCreationForm({ onTournamentCreated, onCancel }
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="tournament-name">Tournament Name</Label>
-              <Input
-                id="tournament-name"
-                value={tournamentName}
-                onChange={(e) => setTournamentName(e.target.value)}
-                placeholder="Enter tournament name"
-              />
+              <Input id="tournament-name" value={tournamentName} onChange={(e) => setTournamentName(e.target.value)} placeholder="Enter tournament name" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="number-of-teams">Number of Teams</Label>
@@ -239,13 +235,7 @@ export default function TournamentCreationForm({ onTournamentCreated, onCancel }
 
           <div className="space-y-2">
             <Label htmlFor="description">Description (Optional)</Label>
-            <Textarea
-              id="description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Enter tournament description"
-              rows={3}
-            />
+            <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Enter tournament description" rows={3} />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -289,138 +279,89 @@ export default function TournamentCreationForm({ onTournamentCreated, onCancel }
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="team-name">Team Name</Label>
-              <Input
-                id="team-name"
-                value={currentTeamName}
-                onChange={(e) => setCurrentTeamName(e.target.value)}
-                placeholder="Enter team name"
-              />
+              <Input id="team-name" value={currentTeamName} onChange={(e) => setCurrentTeamName(e.target.value)} placeholder="Enter team name" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="team-logo">Team Logo (SVG)</Label>
+              <Label htmlFor="team-logo">Team Logo (SVG/PNG)</Label>
               <div className="flex items-center gap-2">
-                <Input
-                  id="team-logo"
-                  type="file"
-                  accept=".svg"
-                  onChange={handleLogoUpload}
-                  className="hidden"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => document.getElementById('team-logo')?.click()}
-                  className="w-full"
-                >
+                <Input id="team-logo" type="file" accept=".svg,.png" onChange={handleLogoUpload} className="hidden" />
+                <Button type="button" variant="outline" onClick={() => document.getElementById('team-logo')?.click()} className="w-full">
                   <Upload className="w-4 h-4 mr-2" />
                   Upload Logo
                 </Button>
               </div>
             </div>
             <div className="space-y-2">
+              <Label htmlFor="home-ground">Home Ground</Label>
+              <Input id="home-ground" value={currentTeamHomeGround} onChange={(e) => setCurrentTeamHomeGround(e.target.value)} placeholder="e.g., Wankhede Stadium" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-2 md:col-span-2">
+              <Label>Select Players (Max 13) - Available: {availablePlayers.length}</Label>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-56 overflow-y-auto border rounded-md p-4">
+                {availablePlayers.map(player => {
+                  const hist = histories[player.id]?.stats;
+                  return (
+                    <div key={player.id} className="flex items-center space-x-2">
+                      <Checkbox id={`player-${player.id}`} checked={selectedPlayers.includes(player.id)} onCheckedChange={() => handlePlayerToggle(player.id)} disabled={selectedPlayers.length >= 13 && !selectedPlayers.includes(player.id)} />
+                      <Label htmlFor={`player-${player.id}`} className="text-sm cursor-pointer">
+                        {player.name}
+                        {hist && (
+                          <span className="ml-1 text-[11px] text-muted-foreground">({hist.runs}R, {hist.wickets}W)</span>
+                        )}
+                      </Label>
+                    </div>
+                  );
+                })}
+              </div>
+              {availablePlayers.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">All players have been selected by teams.</p>
+              )}
+            </div>
+            <div className="space-y-2">
               <Label>Selected Players: {selectedPlayers.length}/13</Label>
-              <Button
-                type="button"
-                onClick={handleAddTeam}
-                disabled={!currentTeamName.trim() || selectedPlayers.length === 0}
-                className="w-full"
-              >
+              <Button type="button" onClick={handleAddTeam} disabled={!currentTeamName.trim() || !currentTeamHomeGround.trim() || selectedPlayers.length === 0} className="w-full">
                 Add Team
               </Button>
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label>Select Players (Max 13) - Available: {availablePlayers.length}</Label>
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 max-h-48 overflow-y-auto border rounded-md p-4">
-              {availablePlayers.map(player => (
-                <div key={player.id} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`player-${player.id}`}
-                    checked={selectedPlayers.includes(player.id)}
-                    onCheckedChange={() => handlePlayerToggle(player.id)}
-                    disabled={selectedPlayers.length >= 13 && !selectedPlayers.includes(player.id)}
-                  />
-                  <Label
-                    htmlFor={`player-${player.id}`}
-                    className="text-sm cursor-pointer"
-                  >
-                    {player.name}
-                  </Label>
-                </div>
-              ))}
-            </div>
-            {availablePlayers.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                All players have been selected by teams.
-              </p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {teams.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Tournament Teams ({teams.length})</CardTitle>
-          </CardHeader>
-          <CardContent>
+          {teams.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {teams.map(team => (
                 <div key={team.id} className="border rounded-lg p-4 relative">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="absolute top-2 right-2 h-6 w-6 p-0"
-                    onClick={() => handleRemoveTeam(team.id)}
-                  >
+                  <Button variant="ghost" size="sm" className="absolute top-2 right-2 h-6 w-6 p-0" onClick={() => handleRemoveTeam(team.id)}>
                     <X className="h-4 h-4" />
                   </Button>
-                  
                   <div className="flex items-center gap-3 mb-3">
-                    {team.logo && (
-                      <img src={team.logo} alt={`${team.name} logo`} className="w-8 h-8" />
-                    )}
-                    <h3 className="font-semibold">{team.name}</h3>
+                    {team.logo && (<img src={team.logo} alt={`${team.name} logo`} className="w-8 h-8" />)}
+                    <div>
+                      <h3 className="font-semibold">{team.name}</h3>
+                      <p className="text-xs text-muted-foreground">Home: {team.homeGround}</p>
+                    </div>
                   </div>
-                  
                   <div className="space-y-1">
-                    <p className="text-sm text-muted-foreground">
-                      Players: {team.players.length}
-                    </p>
+                    <p className="text-sm text-muted-foreground">Players: {team.players.length}</p>
                     <div className="flex flex-wrap gap-1">
                       {team.players.slice(0, 5).map(playerId => {
                         const player = DEFAULT_PLAYERS.find(p => p.id === playerId);
-                        return (
-                          <Badge key={playerId} variant="secondary" className="text-xs">
-                            {player?.name}
-                          </Badge>
-                        );
+                        return (<Badge key={playerId} variant="secondary" className="text-xs">{player?.name}</Badge>);
                       })}
-                      {team.players.length > 5 && (
-                        <Badge variant="outline" className="text-xs">
-                          +{team.players.length - 5} more
-                        </Badge>
-                      )}
+                      {team.players.length > 5 && (<Badge variant="outline" className="text-xs">+{team.players.length - 5} more</Badge>)}
                     </div>
                   </div>
                 </div>
               ))}
             </div>
-          </CardContent>
-        </Card>
-      )}
+          )}
+        </CardContent>
+      </Card>
 
       <div className="flex justify-end gap-4">
-        <Button variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button
-          onClick={handleCreateTournament}
-          disabled={teams.length < 2 || !tournamentName.trim()}
-        >
-          Create Tournament
-        </Button>
+        <Button variant="outline" onClick={onCancel}>Cancel</Button>
+        <Button onClick={handleCreateTournament} disabled={teams.length < 2 || !tournamentName.trim()}>Create Tournament</Button>
       </div>
     </div>
   );

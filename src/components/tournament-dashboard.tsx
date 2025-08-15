@@ -12,11 +12,110 @@ import { DEFAULT_PLAYERS } from '@/data/default-players';
 import type { Tournament, TournamentTeam, TournamentMatch, PlayerStats, Match, MatchSettings } from '@/types';
 import NewMatchForm from './new-match-form';
 import ScoringInterface from './scoring-interface';
+import MatchScorecardDialog from './match-scorecard-dialog';
+import { updatePlayerHistoriesFromMatch } from '@/lib/player-stats-store';
+import { Progress } from '@/components/ui/progress';
 
 interface TournamentDashboardProps {
   tournament: Tournament;
   onTournamentUpdate: (tournament: Tournament) => void;
   onBackToTournaments: () => void;
+}
+
+function computeTournamentAwards(tournament: Tournament, playerStats: PlayerStats[]) {
+  const awards: any = {
+    explosiveBatsman: null,
+    bestAvgBatsman: null,
+    bestAvgBowler: null,
+  };
+
+  const byTeamName = (id: number) => tournament.teams.find(t => t.id === id)?.name || '';
+
+  // Explosive: boundaries density = (4s*4 + 6s*6)/ballsFaced with min balls
+  const battingCandidates = playerStats.filter(p => p.ballsFaced >= 20);
+  const explosive = [...battingCandidates]
+    .map(p => ({ ...p, explosiveness: (p.fours * 4 + p.sixes * 6) / Math.max(1, p.ballsFaced) }))
+    .sort((a, b) => b.explosiveness - a.explosiveness)[0];
+  awards.explosiveBatsman = explosive || null;
+
+  // Best average batsman: runs/matches with min matches
+  const bestAvgBat = [...playerStats]
+    .filter(p => p.matches >= 2 && p.ballsFaced > 0)
+    .map(p => ({ ...p, batAvg: p.runs / p.matches }))
+    .sort((a, b) => b.batAvg - a.batAvg)[0];
+  awards.bestAvgBatsman = bestAvgBat || null;
+
+  // Best average bowler: wickets/matches with min matches
+  const bestAvgBowl = [...playerStats]
+    .filter(p => p.matches >= 2 && p.ballsBowled > 0)
+    .map(p => ({ ...p, bowlAvgPerMatch: p.wickets / p.matches }))
+    .sort((a, b) => b.bowlAvgPerMatch - a.bowlAvgPerMatch)[0];
+  awards.bestAvgBowler = bestAvgBowl || null;
+
+  return awards;
+}
+
+function computeLeaderboards(stats: PlayerStats[]) {
+  const byRuns = [...stats].sort((a, b) => b.runs - a.runs).slice(0, 5);
+  const byWkts = [...stats].sort((a, b) => b.wickets - a.wickets).slice(0, 5);
+  const bySR = [...stats].filter(p => p.ballsFaced >= 20).sort((a, b) => b.strikeRate - a.strikeRate).slice(0, 5);
+  const byEcon = [...stats].filter(p => p.ballsBowled >= 12).sort((a, b) => a.economyRate - b.economyRate).slice(0, 5);
+  const byAvgBat = [...stats].filter(p => p.matches >= 2 && p.ballsFaced > 0).map(p => ({...p, avg: p.runs / p.matches})).sort((a, b) => b.avg - a.avg).slice(0, 5);
+  const byAvgBowl = [...stats].filter(p => p.matches >= 2 && p.ballsBowled > 0).map(p => ({...p, avg: p.wickets / p.matches})).sort((a, b) => b.avg - a.avg).slice(0, 5);
+  const explosive = [...stats].filter(p => p.ballsFaced >= 20).map(p => ({...p, ei: (p.fours*4 + p.sixes*6)/Math.max(1,p.ballsFaced)})).sort((a,b)=> b.ei - a.ei).slice(0,5);
+  return { byRuns, byWkts, bySR, byEcon, byAvgBat, byAvgBowl, explosive };
+}
+
+function normalize(values: number[], maxWidth = 100) {
+  const max = Math.max(...values, 1);
+  return values.map(v => Math.round((v / max) * maxWidth));
+}
+
+function computeFantasyPointsForMatch(match: Match): Array<{ playerId: number; playerName: string; points: number }> {
+  const totals: Record<number, { name: string; points: number }> = {};
+  const add = (id: number, name: string, pts: number) => {
+    totals[id] = totals[id] || { name, points: 0 };
+    totals[id].points += pts;
+  };
+  const allPlayers = match.teams[0].players.concat(match.teams[1].players);
+  // Index by id for quick lookup
+  const idToPlayer = new Map<number, typeof allPlayers[number]>(allPlayers.map(p => [p.id, p] as const));
+  match.innings.forEach(() => {
+    allPlayers.forEach(p => {
+      // batting
+      const rp = p.batting.runs; const bf = p.batting.ballsFaced;
+      if (rp || bf) add(p.id, p.name, rp + Math.floor(rp/2));
+      if (p.batting.fours) add(p.id, p.name, p.batting.fours * 1);
+      if (p.batting.sixes) add(p.id, p.name, p.batting.sixes * 2);
+      // bowling
+      const wk = p.bowling.wickets; const rc = p.bowling.runsConceded; const bb = p.bowling.ballsBowled;
+      if (wk) add(p.id, p.name, wk * 25);
+      if (bb >= 12 && (rc/(bb/6 || 1)) < 6) add(p.id, p.name, 10);
+    });
+  });
+  return Object.entries(totals).map(([id, v]) => ({ playerId: Number(id), playerName: v.name, points: v.points })).sort((a,b)=> b.points - a.points).slice(0,5);
+}
+
+function computeFantasyPointsForTournament(matches: TournamentMatch[]): Array<{ playerId: number; playerName: string; points: number }> {
+  const totals: Record<number, { name: string; points: number }> = {};
+  const add = (id: number, name: string, pts: number) => {
+    totals[id] = totals[id] || { name, points: 0 };
+    totals[id].points += pts;
+  };
+  matches.filter(m => m.status === 'finished' && m.matchData).forEach(m => {
+    const match = m.matchData as Match;
+    const allPlayers = match.teams[0].players.concat(match.teams[1].players);
+    allPlayers.forEach(p => {
+      const rp = p.batting.runs; const bf = p.batting.ballsFaced;
+      if (rp || bf) add(p.id, p.name, rp + Math.floor(rp/2));
+      if (p.batting.fours) add(p.id, p.name, p.batting.fours * 1);
+      if (p.batting.sixes) add(p.id, p.name, p.batting.sixes * 2);
+      const wk = p.bowling.wickets; const rc = p.bowling.runsConceded; const bb = p.bowling.ballsBowled;
+      if (wk) add(p.id, p.name, wk * 25);
+      if (bb >= 12 && (rc/(bb/6 || 1)) < 6) add(p.id, p.name, 10);
+    });
+  });
+  return Object.entries(totals).map(([id, v]) => ({ playerId: Number(id), playerName: v.name, points: v.points })).sort((a,b)=> b.points - a.points).slice(0,5);
 }
 
 export default function TournamentDashboard({ tournament, onTournamentUpdate, onBackToTournaments }: TournamentDashboardProps) {
@@ -306,6 +405,8 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
   const endMatch = (matchResult: Match) => {
     // Calculate match result
     let matchResultText = '';
+    let winnerTeamName: string | null = null;
+    let loserTeamName: string | null = null;
     if (matchResult.innings.length >= 2) {
       const team1Score = matchResult.innings[0].score;
       const team2Score = matchResult.innings[1].score;
@@ -315,8 +416,10 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
       if (team2Score > team1Score) {
         const wicketsLeft = 10 - matchResult.innings[1].wickets;
         matchResultText = `${team2Name} won by ${wicketsLeft} wickets`;
+        winnerTeamName = team2Name; loserTeamName = team1Name;
       } else if (team1Score > team2Score) {
         matchResultText = `${team1Name} won by ${team1Score - team2Score} runs`;
+        winnerTeamName = team1Name; loserTeamName = team2Name;
       } else {
         matchResultText = 'Match tied';
       }
@@ -326,6 +429,9 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
       matchResultText = `${team1Name} scored ${team1Score} runs`;
     }
 
+    // Persist player histories
+    updatePlayerHistoriesFromMatch(matchResult, tournament.id);
+
     // Update tournament match status with result
     const updatedMatches = tournament.matches.map(m => 
       m.id === matchResult.id 
@@ -333,10 +439,15 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
             ...m, 
             status: 'finished' as const, 
             matchData: matchResult,
-            result: matchResultText
+            result: matchResultText,
+            winnerTeamId: winnerTeamName ? tournament.teams.find(t => t.name === winnerTeamName)?.id : undefined,
+            loserTeamId: loserTeamName ? tournament.teams.find(t => t.name === loserTeamName)?.id : undefined,
+            completedDate: new Date(),
           }
         : m
     );
+
+    const thisMatch = updatedMatches.find(m => m.id === matchResult.id)!;
 
     // Calculate team performance from match data
     const updatedTeams = tournament.teams.map(team => {
@@ -412,24 +523,51 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
       };
     });
 
-    // Update final match participants if group stage is complete
+    // Update playoff participants
     const groupMatches = updatedMatches.filter(m => m.round === 'group');
     const completedGroupMatches = groupMatches.filter(m => m.status === 'finished');
-    
+
+    const finalMatch = updatedMatches.find(m => m.round === 'final');
+    const q1 = updatedMatches.find(m => m.round === 'qualifier1');
+    const elim = updatedMatches.find(m => m.round === 'eliminator');
+    const q2 = updatedMatches.find(m => m.round === 'qualifier2');
+
     if (completedGroupMatches.length === groupMatches.length) {
-      // Group stage complete, determine finalists
+      // Group stage complete, determine bracket seeds
       const sortedTeams = [...updatedTeams].sort((a, b) => {
         if (b.points !== a.points) return b.points - a.points;
         return b.netRunRate - a.netRunRate;
       });
 
-      const finalMatch = updatedMatches.find(m => m.round === 'final');
-      if (finalMatch && sortedTeams.length >= 2) {
-        finalMatch.team1Id = sortedTeams[0].id;
-        finalMatch.team2Id = sortedTeams[1].id;
-        finalMatch.team1Name = sortedTeams[0].name;
-        finalMatch.team2Name = sortedTeams[1].name;
+      if (q1 && sortedTeams.length >= 2) {
+        q1.team1Id = sortedTeams[0].id; q1.team1Name = sortedTeams[0].name;
+        q1.team2Id = sortedTeams[1].id; q1.team2Name = sortedTeams[1].name;
       }
+      if (elim && sortedTeams.length >= 4) {
+        elim.team1Id = sortedTeams[2].id; elim.team1Name = sortedTeams[2].name;
+        elim.team2Id = sortedTeams[3].id; elim.team2Name = sortedTeams[3].name;
+      }
+      if (!q1 && !elim && finalMatch && sortedTeams.length >= 2) {
+        finalMatch.team1Id = sortedTeams[0].id; finalMatch.team1Name = sortedTeams[0].name;
+        finalMatch.team2Id = sortedTeams[1].id; finalMatch.team2Name = sortedTeams[1].name;
+      }
+    }
+
+    // Progress winners/losers through playoffs
+    if (thisMatch.round === 'qualifier1' && q1 && finalMatch && q2 && thisMatch.winnerTeamId && thisMatch.loserTeamId) {
+      // Q1 winner to Final, loser to Qualifier 2
+      finalMatch.team1Id = thisMatch.winnerTeamId; finalMatch.team1Name = tournament.teams.find(t => t.id === thisMatch.winnerTeamId)?.name || 'TBD';
+      q2.team2Id = thisMatch.loserTeamId; q2.team2Name = tournament.teams.find(t => t.id === thisMatch.loserTeamId)?.name || 'TBD';
+    }
+
+    if (thisMatch.round === 'eliminator' && elim && q2 && thisMatch.winnerTeamId) {
+      // Eliminator winner to Qualifier 2
+      q2.team1Id = thisMatch.winnerTeamId; q2.team1Name = tournament.teams.find(t => t.id === thisMatch.winnerTeamId)?.name || 'TBD';
+    }
+
+    if (thisMatch.round === 'qualifier2' && q2 && finalMatch && thisMatch.winnerTeamId) {
+      // Qualifier 2 winner to Final (second slot)
+      finalMatch.team2Id = thisMatch.winnerTeamId; finalMatch.team2Name = tournament.teams.find(t => t.id === thisMatch.winnerTeamId)?.name || 'TBD';
     }
 
     const updatedTournament = {
@@ -438,6 +576,20 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
       teams: updatedTeams,
       status: completedGroupMatches.length === groupMatches.length ? 'active' : 'draft',
     };
+
+    // Persist Player of Series when tournament completes (final finished)
+    const finalFinished = updatedMatches.find(m => m.round === 'final' && m.status === 'finished');
+    if (finalFinished) {
+      const mvp = [...playerStats].map(p => ({...p, impact: p.runs + p.wickets*20 + p.fours + p.sixes*2 - (p.runsConceded/5)})).sort((a,b)=> b.impact - a.impact)[0];
+      if (mvp) {
+        updatedTournament.awards = {
+          ...(updatedTournament.awards || {}),
+          playerOfSeriesId: mvp.playerId,
+          playerOfSeriesName: mvp.playerName,
+        };
+      }
+      updatedTournament.status = 'completed';
+    }
 
     onTournamentUpdate(updatedTournament);
     setCurrentMatch(null);
@@ -460,6 +612,13 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
         .slice(0, 5);
     }
   };
+
+  const awards = computeTournamentAwards(tournament, playerStats);
+  const leaderboards = computeLeaderboards(playerStats);
+  const finishedMatches = [...tournament.matches].filter(m => m.status === 'finished' && m.matchData);
+  const lastFinished = finishedMatches.length ? finishedMatches.sort((a,b)=> (b.completedDate? new Date(b.completedDate).getTime():0) - (a.completedDate? new Date(a.completedDate).getTime():0))[0] : null;
+  const lastMatchFantasy = lastFinished ? computeFantasyPointsForMatch(lastFinished.matchData as Match) : [];
+  const tournamentFantasy = computeFantasyPointsForTournament(tournament.matches);
 
   if (currentMatch) {
     return (
@@ -590,11 +749,13 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="points-table">Points Table</TabsTrigger>
           <TabsTrigger value="matches">Matches</TabsTrigger>
           <TabsTrigger value="statistics">Statistics</TabsTrigger>
+          <TabsTrigger value="awards">Awards</TabsTrigger>
+          <TabsTrigger value="history">History</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
@@ -630,6 +791,77 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
             </CardContent>
           </Card>
 
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Explosive Batsman</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {awards.explosiveBatsman ? (
+                  <div className="flex items-center justify-between text-sm">
+                    <div>
+                      <p className="font-semibold">{awards.explosiveBatsman.playerName}</p>
+                      <p className="text-muted-foreground">{awards.explosiveBatsman.teamName}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold">{(awards.explosiveBatsman.explosiveness * 100).toFixed(1)} EI</p>
+                      <p className="text-muted-foreground">{awards.explosiveBatsman.fours}x4, {awards.explosiveBatsman.sixes}x6</p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No data yet</p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Best Avg Batsman</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {awards.bestAvgBatsman ? (
+                  <div className="flex items-center justify-between text-sm">
+                    <div>
+                      <p className="font-semibold">{awards.bestAvgBatsman.playerName}</p>
+                      <p className="text-muted-foreground">{awards.bestAvgBatsman.teamName}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold">{(awards.bestAvgBatsman.runs / awards.bestAvgBatsman.matches).toFixed(1)} Avg</p>
+                      <p className="text-muted-foreground">{awards.bestAvgBatsman.runs} runs</p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No data yet</p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Best Avg Bowler</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {awards.bestAvgBowler ? (
+                  <div className="flex items-center justify-between text-sm">
+                    <div>
+                      <p className="font-semibold">{awards.bestAvgBowler.playerName}</p>
+                      <p className="text-muted-foreground">{awards.bestAvgBowler.teamName}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold">{(awards.bestAvgBowler.wickets / awards.bestAvgBowler.matches).toFixed(1)} Wkts/Match</p>
+                      <p className="text-muted-foreground">{awards.bestAvgBowler.wickets} wickets</p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No data yet</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Note: For AI insights with Gemini, we can later call an API to compute advanced metrics/rankings */}
+
+          {/* Orange / Purple Cap restored */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Card>
               <CardHeader>
@@ -640,7 +872,7 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  {getTopPlayers('batting').map((player, index) => (
+                  {leaderboards.byRuns.map((player, index) => (
                     <div key={player.playerId} className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium">{index + 1}.</span>
@@ -663,7 +895,7 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  {getTopPlayers('bowling').map((player, index) => (
+                  {leaderboards.byWkts.map((player, index) => (
                     <div key={player.playerId} className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium">{index + 1}.</span>
@@ -677,6 +909,165 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
               </CardContent>
             </Card>
           </div>
+
+          {lastFinished && (
+            <Card>
+              <CardHeader><CardTitle>Top Fantasy Players (Last Match)</CardTitle></CardHeader>
+              <CardContent className="space-y-2">
+                {(() => {
+                  const widths = normalize(lastMatchFantasy.map(p => p.points));
+                  return lastMatchFantasy.map((p, idx) => (
+                    <div key={p.playerId} className="space-y-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2"><span className="font-medium">{idx+1}.</span> {p.playerName}</div>
+                        <div className="font-semibold">{p.points} pts</div>
+                      </div>
+                      <Progress value={widths[idx]} className="h-1.5" />
+                    </div>
+                  ));
+                })()}
+              </CardContent>
+            </Card>
+          )}
+
+          {tournamentFantasy.length > 0 && (
+            <Card>
+              <CardHeader><CardTitle>Fantasy Leaderboard (Tournament)</CardTitle></CardHeader>
+              <CardContent className="space-y-2">
+                {(() => {
+                  const widths = normalize(tournamentFantasy.map(p => p.points));
+                  return tournamentFantasy.map((p, idx) => (
+                    <div key={p.playerId} className="space-y-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2"><span className="font-medium">{idx+1}.</span> {p.playerName}</div>
+                        <div className="font-semibold">{p.points} pts</div>
+                      </div>
+                      <Progress value={widths[idx]} className="h-1.5" />
+                    </div>
+                  ));
+                })()}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Post-match fantasy top 5 (if recent finished match exists) */}
+          {(() => {
+            const finished = [...tournament.matches].filter(m => m.status === 'finished' && m.matchData).sort((a,b)=> (b.completedDate? new Date(b.completedDate).getTime():0) - (a.completedDate? new Date(a.completedDate).getTime():0));
+            if (!finished.length) return null;
+            const topFantasy = computeFantasyPointsForMatch(finished[0].matchData as Match);
+            return (
+              <Card>
+                <CardHeader><CardTitle>Top Fantasy Players (Last Match)</CardTitle></CardHeader>
+                <CardContent>
+                  {topFantasy.map((p, idx) => (
+                    <div key={p.playerId} className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-2"><span className="font-medium">{idx+1}.</span> {p.playerName}</div>
+                      <div className="font-semibold">{p.points} pts</div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            );
+          })()}
+        </TabsContent>
+
+        <TabsContent value="awards" className="space-y-6">
+          <Card>
+            <CardHeader><CardTitle>Advanced Awards</CardTitle></CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {(() => {
+                const widths = normalize(leaderboards.bySR.map(p => p.strikeRate));
+                return (
+                  <div>
+                    <h4 className="font-semibold mb-2">Best Strike Rate</h4>
+                    {leaderboards.bySR.map((p, i) => (
+                      <div key={p.playerId} className="space-y-1 mb-1">
+                        <div className="flex items-center justify-between text-sm"><span>{i+1}. {p.playerName}</span><span>{p.strikeRate.toFixed(1)}</span></div>
+                        <Progress value={widths[i]} className="h-1.5" />
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+
+              {(() => {
+                const widths = normalize(leaderboards.byEcon.map(p => 1/Math.max(0.01,p.economyRate))); // lower better
+                return (
+                  <div>
+                    <h4 className="font-semibold mb-2">Best Economy</h4>
+                    {leaderboards.byEcon.map((p, i) => (
+                      <div key={p.playerId} className="space-y-1 mb-1">
+                        <div className="flex items-center justify-between text-sm"><span>{i+1}. {p.playerName}</span><span>{p.economyRate.toFixed(2)}</span></div>
+                        <Progress value={widths[i]} className="h-1.5" />
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+
+              {(() => {
+                const widths = normalize(leaderboards.byAvgBat.map(p => p.runs/p.matches));
+                return (
+                  <div>
+                    <h4 className="font-semibold mb-2">Best Avg Batsman</h4>
+                    {leaderboards.byAvgBat.map((p, i) => (
+                      <div key={p.playerId} className="space-y-1 mb-1">
+                        <div className="flex items-center justify-between text-sm"><span>{i+1}. {p.playerName}</span><span>{(p.runs/p.matches).toFixed(1)}</span></div>
+                        <Progress value={widths[i]} className="h-1.5" />
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+
+              {(() => {
+                const widths = normalize(leaderboards.byAvgBowl.map(p => p.wickets/p.matches));
+                return (
+                  <div>
+                    <h4 className="font-semibold mb-2">Best Avg Bowler</h4>
+                    {leaderboards.byAvgBowl.map((p, i) => (
+                      <div key={p.playerId} className="space-y-1 mb-1">
+                        <div className="flex items-center justify-between text-sm"><span>{i+1}. {p.playerName}</span><span>{(p.wickets/p.matches).toFixed(2)}</span></div>
+                        <Progress value={widths[i]} className="h-1.5" />
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+
+              {(() => {
+                const widths = normalize(leaderboards.explosive.map(p => (p.fours*4 + p.sixes*6)/Math.max(1,p.ballsFaced)));
+                return (
+                  <div>
+                    <h4 className="font-semibold mb-2">Most Explosive</h4>
+                    {leaderboards.explosive.map((p, i) => (
+                      <div key={p.playerId} className="space-y-1 mb-1">
+                        <div className="flex items-center justify-between text-sm"><span>{i+1}. {p.playerName}</span><span>{(((p.fours*4 + p.sixes*6)/Math.max(1,p.ballsFaced))*100).toFixed(1)} EI</span></div>
+                        <Progress value={widths[i]} className="h-1.5" />
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+
+              {(() => {
+                const mvpList = [...playerStats].map(p => ({...p, impact: p.runs + p.wickets*20 + p.fours + p.sixes*2 - (p.runsConceded/5)})).sort((a,b)=> b.impact - a.impact).slice(0,5);
+                const widths = normalize(mvpList.map(p => p.impact));
+                return (
+                  <div>
+                    <h4 className="font-semibold mb-2">MVP (Impact)</h4>
+                    {mvpList.map((p, i) => (
+                      <div key={p.playerId} className="space-y-1 mb-1">
+                        <div className="flex items-center justify-between text-sm"><span>{i+1}. {p.playerName}</span><span>{p.impact.toFixed(0)}</span></div>
+                        <Progress value={widths[i]} className="h-1.5" />
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="points-table">
@@ -706,7 +1097,7 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
                         <TableCell className="font-medium">{index + 1}</TableCell>
                         <TableCell className="flex items-center gap-2">
                           {team.logo && (
-                            <img src={team.logo} alt={`${team.name} logo`} className="w-6 h-6" />
+                            <img src={team.logo} alt={`${team.name} logo`} className="w-6 h-6 rounded" />
                           )}
                           {team.name}
                         </TableCell>
@@ -744,6 +1135,9 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
                         <p className="font-semibold">{match.team1Name}</p>
                         <p className="text-muted-foreground">vs</p>
                         <p className="font-semibold">{match.team2Name}</p>
+                        {match.venue && (
+                          <p className="text-xs text-muted-foreground">Venue: {match.venue}</p>
+                        )}
                       </div>
 
                       <div className="flex items-center justify-center gap-2">
@@ -792,6 +1186,13 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
                           {match.result}
                         </p>
                       )}
+
+                      {match.status === 'finished' && (
+                        <MatchScorecardDialog 
+                          match={match.matchData as any}
+                          trigger={<Button variant="outline" className="w-full" size="sm">View Scorecard</Button>}
+                        />
+                      )}
                     </div>
                   </Card>
                 ))}
@@ -837,6 +1238,52 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
                     ))}
                 </TableBody>
               </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="history">
+          <Card>
+            <CardHeader>
+              <CardTitle>Completed Matches</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {tournament.matches.filter(m => m.status === 'finished').map(match => (
+                  <Card key={match.id} className="p-4">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Badge variant={match.round === 'final' ? 'default' : 'secondary'}>
+                          {match.round === 'final' ? 'Final' : match.round === 'qualifier1' ? 'Qualifier 1' : match.round === 'qualifier2' ? 'Qualifier 2' : match.round === 'eliminator' ? 'Eliminator' : `Match ${match.matchNumber}`}
+                        </Badge>
+                        {match.venue && (
+                          <span className="text-xs text-muted-foreground">{match.venue}</span>
+                        )}
+                      </div>
+                      <div className="text-center space-y-1">
+                        <p className="font-semibold">{match.team1Name}</p>
+                        <p className="text-muted-foreground">vs</p>
+                        <p className="font-semibold">{match.team2Name}</p>
+                        {match.completedDate && (
+                          <p className="text-xs text-muted-foreground">{new Date(match.completedDate).toLocaleString()}</p>
+                        )}
+                        {match.result && (
+                          <p className="text-sm">{match.result}</p>
+                        )}
+                      </div>
+                      {match.matchData && (
+                        <MatchScorecardDialog 
+                          match={match.matchData as any}
+                          trigger={<Button variant="outline" className="w-full" size="sm">View Scorecard</Button>}
+                        />
+                      )}
+                    </div>
+                  </Card>
+                ))}
+                {tournament.matches.filter(m => m.status === 'finished').length === 0 && (
+                  <div className="text-sm text-muted-foreground">No completed matches yet.</div>
+                )}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
