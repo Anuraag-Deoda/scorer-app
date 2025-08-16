@@ -4,12 +4,15 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Trophy, Users, Calendar, Target, TrendingUp, Award, Play, CheckCircle, Clock, XCircle } from 'lucide-react';
+import { Trophy, Users, Calendar, Target, TrendingUp, Award, Play, CheckCircle, Clock, XCircle, BarChart } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { createMatch } from '@/lib/cricket-logic';
 import { DEFAULT_PLAYERS } from '@/data/default-players';
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
+import { Bar, XAxis, YAxis, CartesianGrid, BarChart as ReBarChart } from 'recharts';
 import type { Tournament, TournamentTeam, TournamentMatch, PlayerStats, Match, MatchSettings } from '@/types';
 import NewMatchForm from './new-match-form';
 import ScoringInterface from './scoring-interface';
@@ -1555,6 +1558,50 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
         </TabsContent>
 
         <TabsContent value="awards" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart className="w-5 h-5 text-blue-500" />
+                  Top 5 Run Scorers
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ChartContainer config={{
+                  runs: { label: "Runs", color: "hsl(var(--chart-1))" },
+                }} className="h-[250px] w-full">
+                  <ReBarChart data={leaderboards.byRuns} layout="vertical" margin={{ left: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis type="number" />
+                    <YAxis dataKey="playerName" type="category" width={80} />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Bar dataKey="runs" fill="var(--color-runs)" radius={4} />
+                  </ReBarChart>
+                </ChartContainer>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart className="w-5 h-5 text-green-500" />
+                  Top 5 Wicket Takers
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ChartContainer config={{
+                  wickets: { label: "Wickets", color: "hsl(var(--chart-2))" },
+                }} className="h-[250px] w-full">
+                  <ReBarChart data={leaderboards.byWkts} layout="vertical" margin={{ left: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis type="number" />
+                    <YAxis dataKey="playerName" type="category" width={80} />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Bar dataKey="wickets" fill="var(--color-wickets)" radius={4} />
+                  </ReBarChart>
+                </ChartContainer>
+              </CardContent>
+            </Card>
+          </div>
           <Card>
             <CardHeader><CardTitle>Advanced Awards</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -1990,40 +2037,58 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
         <TabsContent value="statistics">
           <Card>
             <CardHeader>
-              <CardTitle>Player Statistics</CardTitle>
+              <CardTitle>Player Statistics by Team</CardTitle>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Player</TableHead>
-                    <TableHead>Team</TableHead>
-                    <TableHead>Matches</TableHead>
-                    <TableHead>Runs</TableHead>
-                    <TableHead>Wickets</TableHead>
-                    <TableHead>Avg</TableHead>
-                    <TableHead>SR</TableHead>
-                    <TableHead>Econ</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {playerStats
-                    .filter(p => p.matches > 0)
-                    .sort((a, b) => b.runs - a.runs)
-                    .map(player => (
-                      <TableRow key={player.playerId}>
-                        <TableCell className="font-medium">{player.playerName}</TableCell>
-                        <TableCell>{player.teamName}</TableCell>
-                        <TableCell>{player.matches}</TableCell>
-                        <TableCell>{player.runs}</TableCell>
-                        <TableCell>{player.wickets}</TableCell>
-                        <TableCell>{player.average.toFixed(1)}</TableCell>
-                        <TableCell>{player.strikeRate.toFixed(1)}</TableCell>
-                        <TableCell>{player.economyRate.toFixed(2)}</TableCell>
-                      </TableRow>
-                    ))}
-                </TableBody>
-              </Table>
+              <Accordion type="single" collapsible className="w-full">
+                {tournament.teams.map(team => (
+                  <AccordionItem value={`team-${team.id}`} key={team.id}>
+                    <AccordionTrigger>
+                      <div className="flex items-center gap-3">
+                        {team.logo ? (
+                          <img src={team.logo} alt={`${team.name} logo`} className="w-8 h-8 rounded" />
+                        ) : (
+                          <div className="w-8 h-8 bg-muted rounded-full flex items-center justify-center text-sm font-bold">
+                            {team.name.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <span className="font-semibold">{team.name}</span>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Player</TableHead>
+                            <TableHead>Matches</TableHead>
+                            <TableHead>Runs</TableHead>
+                            <TableHead>Wickets</TableHead>
+                            <TableHead>Avg</TableHead>
+                            <TableHead>SR</TableHead>
+                            <TableHead>Econ</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {playerStats
+                            .filter(p => p.teamId === team.id && p.matches > 0)
+                            .sort((a, b) => b.runs - a.runs)
+                            .map(player => (
+                              <TableRow key={player.playerId}>
+                                <TableCell className="font-medium">{player.playerName}</TableCell>
+                                <TableCell>{player.matches}</TableCell>
+                                <TableCell>{player.runs}</TableCell>
+                                <TableCell>{player.wickets}</TableCell>
+                                <TableCell>{player.average.toFixed(1)}</TableCell>
+                                <TableCell>{player.strikeRate.toFixed(1)}</TableCell>
+                                <TableCell>{player.economyRate.toFixed(2)}</TableCell>
+                              </TableRow>
+                            ))}
+                        </TableBody>
+                      </Table>
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
             </CardContent>
           </Card>
         </TabsContent>
