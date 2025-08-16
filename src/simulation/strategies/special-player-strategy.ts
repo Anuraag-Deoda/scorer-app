@@ -13,14 +13,15 @@ export class SpecialPlayerStrategy implements SimulationStrategy {
     const strikerName = context.striker.name;
     const nonStrikerName = context.nonStriker.name;
     const bowlerName = context.bowler.name;
-    const specialPlayerNames = ['Anuraag', 'Prashant', 'Harshal'];
+    // const specialPlayerNames = ['Anuraag', 'Prashant', 'Harshal'];
+    const specialPlayerNames = ['Anuraag'];
 
     return (
       specialPlayerNames.includes(strikerName) ||
       specialPlayerNames.includes(nonStrikerName) ||
       specialPlayerNames.includes(bowlerName)
     );
-  }
+  } 
 
   async simulate(context: CricketContext): Promise<OverSimulationResult> {
     const outcomes: BallOutcome[] = [];

@@ -283,7 +283,7 @@ export interface TournamentMatch {
   team2Name: string;
   matchNumber: number;
   round: 'group' | 'final' | 'qualifier1' | 'eliminator' | 'qualifier2';
-  status: 'pending' | 'inprogress' | 'finished';
+  status: 'pending' | 'inprogress' | 'finished' | 'paused';
   venue?: string; // team home ground or Neutral
   result?: string;
   winnerTeamId?: number;
@@ -307,6 +307,8 @@ export interface TournamentAwards {
   };
 }
 
+export type TournamentType = 'round-robin-3' | 'round-robin-2' | 'knockout' | 'ipl-style';
+
 export interface Tournament {
   id: string;
   name: string;
@@ -320,6 +322,7 @@ export interface Tournament {
   createdDate: Date;
   updatedDate: Date;
   settings: {
+    tournamentType: TournamentType;
     oversPerInnings: number;
     matchType: MatchType;
     groupStageRounds: number; // How many times teams play each other

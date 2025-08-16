@@ -105,58 +105,85 @@ export default function WinProbability({ match, className }: WinProbabilityProps
   }, [match])
 
   return (
-    <Card className={className}>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base font-medium">Win Probability</CardTitle>
+    <Card className={`${className} border-2 border-primary/20 bg-gradient-to-br from-card to-card/50`}>
+      <CardHeader className="pb-3 bg-gradient-to-r from-primary/10 to-transparent border-b border-primary/20">
+        <CardTitle className="text-lg font-semibold text-primary flex items-center gap-2">
+          <div className="w-2 h-2 bg-primary rounded-full"></div>
+          Win Probability
+        </CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="pt-4">
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">{match.innings[0].bowlingTeam.name}</span>
-            <span className="text-sm font-medium">{match.innings[0].battingTeam.name}</span>
+            <span className="text-sm font-medium text-foreground">{match.innings[0].bowlingTeam.name}</span>
+            <span className="text-sm font-medium text-foreground">{match.innings[0].battingTeam.name}</span>
           </div>
-          <Progress value={winProbability} className="h-2" />
+          <Progress value={winProbability} className="h-3 bg-muted/50" />
           <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>{100 - winProbability}%</span>
-            <span>{winProbability}%</span>
+            <span className="font-medium">{100 - winProbability}%</span>
+            <span className="font-medium">{winProbability}%</span>
           </div>
           
-          <div className="h-[150px] w-full mt-4">
-            <ChartContainer config={{
-              probability: {
-                label: 'Win Probability',
-                theme: {
-                  light: 'hsl(var(--primary))',
-                  dark: 'hsl(var(--primary))'
-                }
-              }
-            }}>
-              <LineChart data={winProbHistory} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.2} />
+          <div className="h-[200px] w-full mt-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={winProbHistory} margin={{ top: 20, right: 20, left: 20, bottom: 20 }}>
+                <CartesianGrid 
+                  strokeDasharray="3 3" 
+                  vertical={false} 
+                  stroke="hsl(var(--border))"
+                  opacity={0.3}
+                />
                 <XAxis 
                   dataKey="over" 
-                  label={{ value: 'Over', position: 'insideBottom', offset: -5 }}
-                  tick={{ fontSize: 10 }}
+                  label={{ 
+                    value: 'Over', 
+                    position: 'insideBottom', 
+                    offset: -5,
+                    style: { fill: 'hsl(var(--muted-foreground))', fontSize: 12 }
+                  }}
+                  tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+                  tickLine={false}
+                  axisLine={false}
                 />
                 <YAxis 
                   domain={[0, 100]}
-                  label={{ value: '%', angle: -90, position: 'insideLeft' }}
-                  tick={{ fontSize: 10 }}
+                  label={{ 
+                    value: 'Win Probability %', 
+                    angle: -90, 
+                    position: 'insideLeft',
+                    style: { fill: 'hsl(var(--muted-foreground))', fontSize: 12 }
+                  }}
+                  tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+                  tickLine={false}
+                  axisLine={false}
                 />
                 <Tooltip 
-                  formatter={(value) => [`${value}%`, 'Win Probability']}
-                  labelFormatter={(label) => `Over ${label}`}
+                  contentStyle={{
+                    backgroundColor: 'hsl(var(--card))',
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '8px',
+                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                  }}
+                  formatter={(value) => [
+                    <span className="font-semibold text-primary">
+                      {value}%
+                    </span>,
+                    'Win Probability'
+                  ]}
+                  labelFormatter={(label) => (
+                    <span className="font-medium text-foreground">Over {label}</span>
+                  )}
                 />
                 <Line 
                   type="monotone" 
                   dataKey="probability" 
-                  stroke="hsl(var(--primary))" 
-                  strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 6 }}
+                  stroke="hsl(var(--chart-2))" 
+                  strokeWidth={3}
+                  dot={{ fill: 'hsl(var(--chart-2))', strokeWidth: 2, r: 3 }}
+                  activeDot={{ r: 6, fill: 'hsl(var(--chart-2))', stroke: 'hsl(var(--background))', strokeWidth: 2 }}
                 />
               </LineChart>
-            </ChartContainer>
+            </ResponsiveContainer>
           </div>
         </div>
       </CardContent>

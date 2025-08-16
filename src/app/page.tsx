@@ -16,7 +16,6 @@ import { useToast } from "@/hooks/use-toast"
 import PlayerRatingsDialog from '@/components/player-ratings-dialog';
 
 const LOCAL_STORAGE_KEY = 'cricket-clash-scorer-match';
-const TOURNAMENTS_STORAGE_KEY = 'cricket-clash-scorer-tournaments';
 
 export default function Home() {
   const [match, setMatch] = useState<Match | null>(null);
@@ -26,6 +25,7 @@ export default function Home() {
   const [isClient, setIsClient] = useState(false);
   const [isRatingsOpen, setIsRatingsOpen] = useState(false);
   const [players, setPlayers] = useState<Player[]>([]);
+  const [isLoadingTournaments, setIsLoadingTournaments] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -45,11 +45,6 @@ export default function Home() {
       if (savedMatch) {
         setMatch(JSON.parse(savedMatch));
       }
-
-      const savedTournaments = localStorage.getItem(TOURNAMENTS_STORAGE_KEY);
-      if (savedTournaments) {
-        setTournaments(JSON.parse(savedTournaments));
-      }
     } catch (error) {
       console.error("Failed to load data from local storage", error);
       toast({
@@ -58,6 +53,9 @@ export default function Home() {
         description: "Could not load saved data.",
       })
     }
+
+    // Fetch tournaments from database
+    fetchTournaments();
   }, [toast]);
 
   useEffect(() => {
@@ -75,18 +73,32 @@ export default function Home() {
     }
   }, [match, toast]);
 
-  useEffect(() => {
+  const fetchTournaments = async () => {
+    setIsLoadingTournaments(true);
     try {
-      localStorage.setItem(TOURNAMENTS_STORAGE_KEY, JSON.stringify(tournaments));
+      const response = await fetch('/api/tournaments');
+      if (response.ok) {
+        const data = await response.json();
+        setTournaments(data.tournaments || []);
+      } else {
+        console.error('Failed to fetch tournaments');
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Could not load tournaments from database.",
+        });
+      }
     } catch (error) {
-      console.error("Failed to save tournaments to local storage", error);
+      console.error('Error fetching tournaments:', error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Could not save tournament data.",
-      })
+        description: "Could not load tournaments from database.",
+      });
+    } finally {
+      setIsLoadingTournaments(false);
     }
-  }, [tournaments, toast]);
+  };
 
   const handleNewMatch = (settings: MatchSettings) => {
     const newMatch = createMatch(settings, players);
@@ -113,15 +125,81 @@ export default function Home() {
     });
   };
 
-  const handleTournamentUpdate = (updatedTournament: Tournament) => {
-    setTournaments(tournaments.map(t => 
-      t.id === updatedTournament.id ? updatedTournament : t
-    ));
-    setCurrentTournament(updatedTournament);
+  const handleTournamentUpdate = async (updatedTournament: Tournament) => {
+    try {
+      // Update tournament in database
+      const response = await fetch(`/api/tournaments/${updatedTournament.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          matches: updatedTournament.matches,
+          teams: updatedTournament.teams,
+          status: updatedTournament.status,
+          awards: updatedTournament.awards,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update tournament');
+      }
+
+      // Update local state
+      setTournaments(tournaments.map(t => 
+        t.id === updatedTournament.id ? updatedTournament : t
+      ));
+      setCurrentTournament(updatedTournament);
+
+      // toast({
+      //   title: "Success",
+      //   description: "Tournament updated successfully!",
+      // });
+    } catch (error) {
+      console.error('Error updating tournament:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to update tournament. Please try again.",
+      });
+    }
   };
 
   const handleBackToTournaments = () => {
     setCurrentTournament(null);
+  };
+
+  const handleDeleteTournament = async (tournamentId: string) => {
+    try {
+      const response = await fetch(`/api/tournaments/${tournamentId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete tournament');
+      }
+
+      // Remove tournament from tournaments list
+      const updatedTournaments = tournaments.filter(t => t.id !== tournamentId);
+      setTournaments(updatedTournaments);
+      
+      // If the deleted tournament was the current one, go back to tournaments list
+      if (currentTournament?.id === tournamentId) {
+        setCurrentTournament(null);
+      }
+      
+      toast({
+        title: "Tournament Deleted",
+        description: "Tournament and all associated data has been removed.",
+      });
+    } catch (error) {
+      console.error('Error deleting tournament:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to delete tournament. Please try again.",
+      });
+    }
   };
 
   if (!isClient) {
@@ -178,10 +256,13 @@ export default function Home() {
         </TabsContent>
 
         <TabsContent value="tournaments" className="space-y-4">
-          <TournamentsList 
+          <TournamentsList
             tournaments={tournaments}
             onCreateTournament={() => setActiveTab('create-tournament')}
             onViewTournament={setCurrentTournament}
+            onDeleteTournament={handleDeleteTournament}
+            isLoading={isLoadingTournaments}
+            onRefresh={fetchTournaments}
           />
         </TabsContent>
 

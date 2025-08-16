@@ -63,6 +63,19 @@ export const DEFAULT_PLAYERS = [
   { id: 62, name: "Rahul A" },
   { id: 63, name: "Tausif" },
   { id: 64, name: "Rajesh" },
-  { id: 65, name: "Priyanka"}
+  { id: 65, name: "Priyanka"},
+  { id: 66, name: "Siddharth" },
+  { id: 67, name: "Ravi" },
+  { id: 68, name: "Hritik" },
+  { id: 69, name: "Rajbhushan" },
+  { id: 70, name: "Akanksha" },
+  { id: 71, name: "Ashwini C" },
+  { id: 72, name: "Ashwini S" },
+  { id: 73, name: "Rupam M" },
+  { id: 74, name: "Divyesh L" },
+  { id: 75, name: "Prasunn" },
+  { id: 76, name: "Tushar" },
+  { id: 77, name: "Ramchandra" },
+  { id: 78, name: "Prajakta" },
 ];
 

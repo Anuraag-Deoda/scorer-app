@@ -12,7 +12,8 @@ import { Badge } from '@/components/ui/badge';
 import { X, Upload, Trophy } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { DEFAULT_PLAYERS } from '@/data/default-players';
-import type { Tournament, TournamentTeam, MatchType, TournamentMatch } from '@/types';
+import { MatchType } from '@/types';
+import type { Tournament, TournamentTeam, TournamentMatch, TournamentType } from '@/types';
 import { loadAllPlayerHistories } from '@/lib/player-stats-store';
 
 interface TournamentCreationFormProps {
@@ -25,12 +26,15 @@ export default function TournamentCreationForm({ onTournamentCreated, onCancel }
   const [description, setDescription] = useState('');
   const [numberOfTeams, setNumberOfTeams] = useState(4);
   const [oversPerInnings, setOversPerInnings] = useState(5);
-  const [matchType, setMatchType] = useState<MatchType>('5 Overs');
+  const [matchType, setMatchType] = useState<MatchType>(MatchType.FiveOvers);
   const [teams, setTeams] = useState<TournamentTeam[]>([]);
   const [currentTeamName, setCurrentTeamName] = useState('');
   const [currentTeamLogo, setCurrentTeamLogo] = useState<File | null>(null);
+  const [currentTeamLogoPreview, setCurrentTeamLogoPreview] = useState<string>('');
   const [currentTeamHomeGround, setCurrentTeamHomeGround] = useState('');
   const [selectedPlayers, setSelectedPlayers] = useState<number[]>([]);
+  const [tournamentType, setTournamentType] = useState<TournamentType>('round-robin-3');
+  const [isCreating, setIsCreating] = useState(false);
   const { toast } = useToast();
 
   // Get available players (not selected by any team)
@@ -63,7 +67,7 @@ export default function TournamentCreationForm({ onTournamentCreated, onCancel }
     const newTeam: TournamentTeam = {
       id: teams.length + 1,
       name: currentTeamName.trim(),
-      logo: currentTeamLogo ? URL.createObjectURL(currentTeamLogo) : undefined,
+      logo: currentTeamLogoPreview,
       homeGround: currentTeamHomeGround.trim(),
       players: selectedPlayers,
       points: 0,
@@ -81,6 +85,7 @@ export default function TournamentCreationForm({ onTournamentCreated, onCancel }
     setTeams([...teams, newTeam]);
     setCurrentTeamName('');
     setCurrentTeamLogo(null);
+    setCurrentTeamLogoPreview('');
     setCurrentTeamHomeGround('');
     setSelectedPlayers([]);
 
@@ -95,7 +100,7 @@ export default function TournamentCreationForm({ onTournamentCreated, onCancel }
     setSelectedPlayers(prev => prev.includes(playerId) ? prev.filter(id => id !== playerId) : [...prev, playerId]);
   };
 
-  const handleCreateTournament = () => {
+  const handleCreateTournament = async () => {
     if (!tournamentName.trim()) {
       toast({ variant: "destructive", title: "Error", description: "Please enter a tournament name." });
       return;
@@ -106,95 +111,170 @@ export default function TournamentCreationForm({ onTournamentCreated, onCancel }
       return;
     }
 
-    // Generate tournament matches
-    const matches = generateTournamentMatches(teams);
+    setIsCreating(true);
 
-    const tournament: Tournament = {
-      id: `tournament_${Date.now()}`,
-      name: tournamentName.trim(),
-      description: description.trim(),
-      numberOfTeams: teams.length,
-      teams,
-      matches,
-      status: 'draft',
-      createdDate: new Date(),
-      updatedDate: new Date(),
-      settings: {
-        oversPerInnings,
-        matchType,
-        groupStageRounds: 3, // Each team plays each other 3 times
-        topTeamsAdvance: teams.length > 4 ? 4 : 2, // For playoffs
-      },
-    };
+    try {
+      // Generate tournament matches
+      const matches = generateTournamentMatches(teams);
 
-    onTournamentCreated(tournament);
+      const tournamentData = {
+        name: tournamentName.trim(),
+        description: description.trim(),
+        numberOfTeams: teams.length,
+        teams,
+        matches,
+        settings: {
+          tournamentType,
+          oversPerInnings: oversPerInnings,
+          matchType: matchType as MatchType,
+          groupStageRounds: tournamentType === 'round-robin-3' ? 3 : tournamentType === 'round-robin-2' ? 2 : 1,
+          topTeamsAdvance: Math.min(4, teams.length),
+        },
+      };
+
+      // Create tournament in database
+      const response = await fetch('/api/tournaments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(tournamentData),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create tournament');
+      }
+
+      const result = await response.json();
+      
+      // Create tournament object for local state
+      const tournament: Tournament = {
+        id: result.tournamentId,
+        name: tournamentName.trim(),
+        description: description.trim(),
+        numberOfTeams: teams.length,
+        teams,
+        matches,
+        status: 'draft',
+        createdDate: new Date(),
+        updatedDate: new Date(),
+        settings: {
+          tournamentType,
+          oversPerInnings: oversPerInnings,
+          matchType: matchType as MatchType,
+          groupStageRounds: tournamentType === 'round-robin-3' ? 3 : tournamentType === 'round-robin-2' ? 2 : 1,
+          topTeamsAdvance: Math.min(4, teams.length),
+        },
+      };
+
+      onTournamentCreated(tournament);
+      toast({ title: "Success", description: "Tournament created successfully!" });
+    } catch (error) {
+      console.error('Error creating tournament:', error);
+      toast({ 
+        variant: "destructive", 
+        title: "Error", 
+        description: "Failed to create tournament. Please try again." 
+      });
+    } finally {
+      setIsCreating(false);
+    }
   };
 
-  const generateTournamentMatches = (tournamentTeams: TournamentTeam[]) => {
+  const generateTournamentMatches = (tournamentTeams: TournamentTeam[]): TournamentMatch[] => {
     const matches: TournamentMatch[] = [];
     let matchNumber = 1;
+    const neutralVenue = "Neutral Ground";
 
-    // For each unique pair, schedule 3 matches: home1, home2, neutral
-    for (let i = 0; i < tournamentTeams.length; i++) {
-      for (let j = i + 1; j < tournamentTeams.length; j++) {
-        const teamA = tournamentTeams[i];
-        const teamB = tournamentTeams[j];
-        matches.push({
-          id: `match_${Date.now()}_${matchNumber}`,
-          tournamentId: `tournament_${Date.now()}`,
-          team1Id: teamA.id,
-          team2Id: teamB.id,
-          team1Name: teamA.name,
-          team2Name: teamB.name,
-          matchNumber: matchNumber++,
-          round: 'group',
-          venue: teamA.homeGround || 'Neutral',
-          status: 'pending',
-        });
-        matches.push({
-          id: `match_${Date.now()}_${matchNumber}`,
-          tournamentId: `tournament_${Date.now()}`,
-          team1Id: teamA.id,
-          team2Id: teamB.id,
-          team1Name: teamA.name,
-          team2Name: teamB.name,
-          matchNumber: matchNumber++,
-          round: 'group',
-          venue: teamB.homeGround || 'Neutral',
-          status: 'pending',
-        });
-        matches.push({
-          id: `match_${Date.now()}_${matchNumber}`,
-          tournamentId: `tournament_${Date.now()}`,
-          team1Id: teamA.id,
-          team2Id: teamB.id,
-          team1Name: teamA.name,
-          team2Name: teamB.name,
-          matchNumber: matchNumber++,
-          round: 'group',
-          venue: 'Neutral',
-          status: 'pending',
-        });
+    if (tournamentType === 'knockout') {
+      const shuffledTeams = [...tournamentTeams].sort(() => Math.random() - 0.5);
+      for (let i = 0; i < shuffledTeams.length; i += 2) {
+        if (shuffledTeams[i + 1]) {
+          matches.push({
+            id: `match${matchNumber++}`,
+            tournamentId: '',
+            team1Id: shuffledTeams[i].id,
+            team2Id: shuffledTeams[i + 1].id,
+            team1Name: shuffledTeams[i].name,
+            team2Name: shuffledTeams[i + 1].name,
+            matchNumber: matchNumber - 1,
+            round: 'group',
+            status: 'pending',
+            venue: neutralVenue,
+          });
+        }
+      }
+    } else {
+      const rounds = tournamentType === 'round-robin-3' ? 3 : (tournamentType === 'round-robin-2' || tournamentType === 'ipl-style') ? 2 : 1;
+      for (let r = 0; r < rounds; r++) {
+        for (let i = 0; i < tournamentTeams.length; i++) {
+          for (let j = i + 1; j < tournamentTeams.length; j++) {
+            const team1 = tournamentTeams[i];
+            const team2 = tournamentTeams[j];
+            let venue = neutralVenue;
+            if (r === 0) venue = team1.homeGround || neutralVenue;
+            else if (r === 1) venue = team2.homeGround || neutralVenue;
+            
+            matches.push({
+              id: `match${matchNumber++}`,
+              tournamentId: '',
+              team1Id: team1.id,
+              team2Id: team2.id,
+              team1Name: team1.name,
+              team2Name: team2.name,
+              matchNumber: matchNumber - 1,
+              round: 'group',
+              status: 'pending',
+              venue,
+            });
+          }
+        }
       }
     }
 
-    // Add playoffs placeholders
-    if (tournamentTeams.length > 4) {
-      matches.push({ id: `q1_${Date.now()}`, tournamentId: `tournament_${Date.now()}`, team1Id: 0, team2Id: 0, team1Name: 'TBD', team2Name: 'TBD', matchNumber: matchNumber++, round: 'qualifier1', status: 'pending', venue: 'Neutral' });
-      matches.push({ id: `elim_${Date.now()}`, tournamentId: `tournament_${Date.now()}`, team1Id: 0, team2Id: 0, team1Name: 'TBD', team2Name: 'TBD', matchNumber: matchNumber++, round: 'eliminator', status: 'pending', venue: 'Neutral' });
-      matches.push({ id: `q2_${Date.now()}`, tournamentId: `tournament_${Date.now()}`, team1Id: 0, team2Id: 0, team1Name: 'TBD', team2Name: 'TBD', matchNumber: matchNumber++, round: 'qualifier2', status: 'pending', venue: 'Neutral' });
-      matches.push({ id: `final_${Date.now()}`, tournamentId: `tournament_${Date.now()}`, team1Id: 0, team2Id: 0, team1Name: 'TBD', team2Name: 'TBD', matchNumber: matchNumber++, round: 'final', status: 'pending', venue: 'Neutral' });
-    } else {
-      matches.push({ id: `final_${Date.now()}`, tournamentId: `tournament_${Date.now()}`, team1Id: 0, team2Id: 0, team1Name: 'TBD', team2Name: 'TBD', matchNumber: matchNumber++, round: 'final', status: 'pending', venue: 'Neutral' });
+    if (tournamentTeams.length >= 4 && (tournamentType === 'ipl-style' || tournamentType !== 'knockout')) {
+      matches.push({
+        id: `match${matchNumber++}`,
+        tournamentId: '',
+        team1Id: 0, team2Id: 0, team1Name: 'TBD', team2Name: 'TBD',
+        matchNumber: matchNumber - 1, round: 'qualifier1', status: 'pending', venue: neutralVenue,
+      });
+      matches.push({
+        id: `match${matchNumber++}`,
+        tournamentId: '',
+        team1Id: 0, team2Id: 0, team1Name: 'TBD', team2Name: 'TBD',
+        matchNumber: matchNumber - 1, round: 'eliminator', status: 'pending', venue: neutralVenue,
+      });
+      matches.push({
+        id: `match${matchNumber++}`,
+        tournamentId: '',
+        team1Id: 0, team2Id: 0, team1Name: 'TBD', team2Name: 'TBD',
+        matchNumber: matchNumber - 1, round: 'qualifier2', status: 'pending', venue: neutralVenue,
+      });
     }
 
-    return matches;
+    matches.push({
+      id: `match${matchNumber++}`,
+      tournamentId: '',
+      team1Id: 0, team2Id: 0, team1Name: 'TBD', team2Name: 'TBD',
+      matchNumber: matchNumber - 1, round: 'final', status: 'pending', venue: neutralVenue,
+    });
+
+    return matches.map(m => ({ ...m, tournamentId: `tournament_${Date.now()}` }));
   };
 
   const handleLogoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file && (file.type === 'image/svg+xml' || file.type === 'image/png')) {
       setCurrentTeamLogo(file);
+      
+      // Convert to base64 for preview and storage
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const result = e.target?.result as string;
+        setCurrentTeamLogoPreview(result);
+      };
+      reader.readAsDataURL(file);
     } else if (file) {
       toast({ variant: "destructive", title: "Error", description: "Please upload an SVG or PNG file for the team logo." });
     }
@@ -259,14 +339,35 @@ export default function TournamentCreationForm({ onTournamentCreated, onCancel }
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="2 Overs">2 Overs</SelectItem>
-                  <SelectItem value="5 Overs">5 Overs</SelectItem>
-                  <SelectItem value="10 Overs">10 Overs</SelectItem>
-                  <SelectItem value="T20">T20</SelectItem>
-                  <SelectItem value="50 Overs">50 Overs</SelectItem>
+                  <SelectItem value={MatchType.TwoOvers}>2 Overs</SelectItem>
+                  <SelectItem value={MatchType.FiveOvers}>5 Overs</SelectItem>
+                  <SelectItem value={MatchType.TenOvers}>10 Overs</SelectItem>
+                  <SelectItem value={MatchType.T20}>T20</SelectItem>
+                  <SelectItem value={MatchType.FiftyOvers}>50 Overs</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="tournament-type">Tournament Type</Label>
+            <Select value={tournamentType} onValueChange={(value: TournamentType) => setTournamentType(value)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select tournament type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="round-robin-3">Round Robin (3 matches each)</SelectItem>
+                <SelectItem value="round-robin-2">Round Robin (2 matches each)</SelectItem>
+                <SelectItem value="knockout">Single Elimination Knockout</SelectItem>
+                <SelectItem value="ipl-style">IPL Style (Group + Playoffs)</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-sm text-muted-foreground">
+              {tournamentType === 'round-robin-3' && 'Each team plays every other team 3 times (home, away, neutral)'}
+              {tournamentType === 'round-robin-2' && 'Each team plays every other team 2 times (home, away)'}
+              {tournamentType === 'knockout' && 'Single elimination tournament - lose once and you\'re out!'}
+              {tournamentType === 'ipl-style' && 'Group stage followed by playoffs (Qualifier 1, Eliminator, Qualifier 2, Final)'}
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -296,6 +397,13 @@ export default function TournamentCreationForm({ onTournamentCreated, onCancel }
               <Input id="home-ground" value={currentTeamHomeGround} onChange={(e) => setCurrentTeamHomeGround(e.target.value)} placeholder="e.g., Wankhede Stadium" />
             </div>
           </div>
+
+          {currentTeamLogoPreview && (
+            <div className="flex items-center gap-2">
+              <Label>Logo Preview:</Label>
+              <img src={currentTeamLogoPreview} alt="Team logo preview" className="w-8 h-8 border rounded" />
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2 md:col-span-2">
@@ -361,7 +469,9 @@ export default function TournamentCreationForm({ onTournamentCreated, onCancel }
 
       <div className="flex justify-end gap-4">
         <Button variant="outline" onClick={onCancel}>Cancel</Button>
-        <Button onClick={handleCreateTournament} disabled={teams.length < 2 || !tournamentName.trim()}>Create Tournament</Button>
+        <Button onClick={handleCreateTournament} disabled={teams.length < 2 || !tournamentName.trim() || isCreating}>
+          {isCreating ? 'Creating...' : 'Create Tournament'}
+        </Button>
       </div>
     </div>
   );

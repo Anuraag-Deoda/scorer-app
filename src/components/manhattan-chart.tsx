@@ -45,49 +45,62 @@ export default function ManhattanChart({ innings, className }: ManhattanChartPro
   }, [innings])
 
   return (
-    <Card className={className}>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base font-medium">Runs Per Over</CardTitle>
+    <Card className={`${className} border-2 border-primary/20 bg-gradient-to-br from-card to-card/50`}>
+      <CardHeader className="pb-3 bg-gradient-to-r from-primary/10 to-transparent border-b border-primary/20">
+        <CardTitle className="text-lg font-semibold text-primary flex items-center gap-2">
+          <div className="w-2 h-2 bg-primary rounded-full"></div>
+          Runs Per Over
+        </CardTitle>
       </CardHeader>
       <CardContent className="p-0">
-        <ResponsiveContainer width="100%" height={200}>
-          <BarChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+        <ResponsiveContainer width="100%" height={250}>
+          <BarChart data={data} margin={{ top: 20, right: 20, left: 20, bottom: 20 }}>
+            <CartesianGrid 
+              strokeDasharray="3 3" 
+              vertical={false} 
+              stroke="hsl(var(--border))"
+              opacity={0.3}
+            />
             <XAxis
               dataKey="over"
               tickLine={false}
               axisLine={false}
               tickMargin={8}
               tickFormatter={(value) => `Ov ${value}`}
+              tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
             />
-            <YAxis />
+            <YAxis 
+              tickLine={false}
+              axisLine={false}
+              tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
+            />
             <Tooltip
               content={({ active, payload }) => {
                 if (active && payload && payload.length) {
                   return (
-                    <div className="rounded-lg border bg-background p-2 shadow-sm">
-                      <div className="grid grid-cols-2 gap-2">
+                    <div className="rounded-lg border bg-card p-3 shadow-lg border-primary/20">
+                      <div className="grid grid-cols-3 gap-3">
                         <div className="flex flex-col">
-                          <span className="text-[0.70rem] uppercase text-muted-foreground">
+                          <span className="text-xs uppercase text-muted-foreground font-medium">
                             Over
                           </span>
-                          <span className="font-bold text-muted-foreground">
+                          <span className="font-bold text-primary text-lg">
                             {payload[0].payload.over}
                           </span>
                         </div>
                         <div className="flex flex-col">
-                          <span className="text-[0.70rem] uppercase text-muted-foreground">
+                          <span className="text-xs uppercase text-muted-foreground font-medium">
                             Runs
                           </span>
-                          <span className="font-bold">
+                          <span className="font-bold text-chart-2 text-lg">
                             {payload[0].value}
                           </span>
                         </div>
                         <div className="flex flex-col">
-                          <span className="text-[0.70rem] uppercase text-muted-foreground">
+                          <span className="text-xs uppercase text-muted-foreground font-medium">
                             Wickets
                           </span>
-                          <span className="font-bold text-destructive">
+                          <span className="font-bold text-destructive text-lg">
                             {payload[1].value}
                           </span>
                         </div>
@@ -98,9 +111,29 @@ export default function ManhattanChart({ innings, className }: ManhattanChartPro
                 return null
               }}
             />
-            <Legend />
-            <Bar dataKey="runs" fill="hsl(var(--primary))" radius={4} />
-            <Bar dataKey="wickets" fill="hsl(var(--destructive))" radius={4} />
+            <Legend 
+              verticalAlign="top" 
+              height={36}
+              formatter={(value, entry, index) => (
+                <span className="text-sm font-medium text-foreground">
+                  {value === 'runs' ? 'Runs' : 'Wickets'}
+                </span>
+              )}
+            />
+            <Bar 
+              dataKey="runs" 
+              fill="hsl(var(--chart-2))" 
+              radius={[4, 4, 0, 0]}
+              stroke="hsl(var(--chart-2))"
+              strokeWidth={1}
+            />
+            <Bar 
+              dataKey="wickets" 
+              fill="hsl(var(--destructive))" 
+              radius={[4, 4, 0, 0]}
+              stroke="hsl(var(--destructive))"
+              strokeWidth={1}
+            />
           </BarChart>
         </ResponsiveContainer>
       </CardContent>

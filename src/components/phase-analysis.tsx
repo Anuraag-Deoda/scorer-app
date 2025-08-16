@@ -103,32 +103,85 @@ export default function PhaseAnalysis({ innings, matchType, className }: PhaseAn
   }, [innings, matchType])
 
   return (
-    <Card className={className}>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base font-medium">Phase Analysis</CardTitle>
+    <Card className={`${className} border-2 border-primary/20 bg-gradient-to-br from-card to-card/50`}>
+      <CardHeader className="pb-3 bg-gradient-to-r from-primary/10 to-transparent border-b border-primary/20">
+        <CardTitle className="text-lg font-semibold text-primary flex items-center gap-2">
+          <div className="w-2 h-2 bg-primary rounded-full"></div>
+          Phase Analysis
+        </CardTitle>
       </CardHeader>
-      <CardContent>
-        <ResponsiveContainer width="100%" height={200}>
+      <CardContent className="pt-4">
+        <ResponsiveContainer width="100%" height={250}>
           {phaseData.length > 0 ? (
-            <BarChart data={phaseData}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+            <BarChart data={phaseData} margin={{ top: 20, right: 20, left: 20, bottom: 20 }}>
+              <CartesianGrid 
+                strokeDasharray="3 3" 
+                vertical={false} 
+                stroke="hsl(var(--border))"
+                opacity={0.3}
+              />
               <XAxis
                 dataKey="name"
                 tickLine={false}
                 axisLine={false}
                 tickMargin={8}
+                tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
               />
-              <YAxis yAxisId="left" orientation="left" />
-              <YAxis yAxisId="right" orientation="right" />
+              <YAxis 
+                yAxisId="left" 
+                orientation="left"
+                tickLine={false}
+                axisLine={false}
+                tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
+              />
+              <YAxis 
+                yAxisId="right" 
+                orientation="right"
+                tickLine={false}
+                axisLine={false}
+                tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
+              />
               <Tooltip
+                contentStyle={{
+                  backgroundColor: 'hsl(var(--card))',
+                  border: '1px solid hsl(var(--border))',
+                  borderRadius: '8px',
+                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                }}
                 formatter={(value, name, props) => {
-                  if (name === 'runs') return [`${value} runs (${props.payload.balls} balls)`, 'Runs']
-                  if (name === 'runRate') return [`${value}`, 'Run Rate']
-                  if (name === 'wickets') return [`${value}`, 'Wickets']
+                  if (name === 'runs') return [
+                    <span className="font-semibold text-primary">
+                      {value} runs
+                    </span>,
+                    <span className="text-muted-foreground">
+                      {props.payload.balls} balls
+                    </span>
+                  ]
+                  if (name === 'runRate') return [
+                    <span className="font-semibold text-chart-3">
+                      {value}
+                    </span>,
+                    'Run Rate'
+                  ]
+                  if (name === 'wickets') return [
+                    <span className="font-semibold text-destructive">
+                      {value}
+                    </span>,
+                    'Wickets'
+                  ]
                   return [value, name]
                 }}
+                labelFormatter={(label) => (
+                  <span className="font-medium text-foreground">{label}</span>
+                )}
               />
-              <Bar dataKey="runs" yAxisId="left" radius={4}>
+              <Bar 
+                dataKey="runs" 
+                yAxisId="left" 
+                radius={[4, 4, 0, 0]}
+                stroke="hsl(var(--primary))"
+                strokeWidth={1}
+              >
                 {phaseData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={entry.color} />
                 ))}
@@ -136,13 +189,23 @@ export default function PhaseAnalysis({ innings, matchType, className }: PhaseAn
               <Bar
                 dataKey="wickets"
                 yAxisId="left"
-                radius={4}
+                radius={[4, 4, 0, 0]}
                 fill="hsl(var(--destructive))"
+                stroke="hsl(var(--destructive))"
+                strokeWidth={1}
               />
             </BarChart>
           ) : (
             <div className="flex h-full items-center justify-center">
-              <p className="text-muted-foreground">No phase data available</p>
+              <div className="text-center">
+                <div className="w-16 h-16 mx-auto mb-3 bg-muted/50 rounded-full flex items-center justify-center">
+                  <svg className="w-8 h-8 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                </div>
+                <p className="text-muted-foreground font-medium">No phase data available</p>
+                <p className="text-sm text-muted-foreground">Start scoring to see phase analysis</p>
+              </div>
             </div>
           )}
         </ResponsiveContainer>

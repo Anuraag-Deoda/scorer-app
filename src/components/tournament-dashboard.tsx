@@ -2,12 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Trophy, Users, Calendar, Target, TrendingUp, Award, Play, CheckCircle, Clock, XCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { createMatch } from '@/lib/cricket-logic';
 import { DEFAULT_PLAYERS } from '@/data/default-players';
 import type { Tournament, TournamentTeam, TournamentMatch, PlayerStats, Match, MatchSettings } from '@/types';
 import NewMatchForm from './new-match-form';
@@ -124,11 +125,74 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
   const [showMatchForm, setShowMatchForm] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<TournamentMatch | null>(null);
   const [playerStats, setPlayerStats] = useState<PlayerStats[]>([]);
+  const [showTossInterface, setShowTossInterface] = useState(false);
+  const [tossWinner, setTossWinner] = useState<string>('');
+  const [tossDecision, setTossDecision] = useState<'bat' | 'bowl'>('bat');
+  const [currentTournamentMatchId, setCurrentTournamentMatchId] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
     calculatePlayerStats();
   }, [tournament]);
+
+  useEffect(() => {
+    // Recover any lost match data from localStorage
+    const recoverLostMatches = () => {
+      const keys = Object.keys(localStorage);
+      const matchBackupKeys = keys.filter(key => key.startsWith(`match_backup_${tournament.id}_`));
+      
+      if (matchBackupKeys.length > 0) {
+        //console.log(`Found ${matchBackupKeys.length} match backups to check`);
+        
+        matchBackupKeys.forEach(key => {
+          try {
+            const backup = JSON.parse(localStorage.getItem(key)!);
+            const matchId = backup.matchId;
+            const match = tournament.matches.find(m => m.id === matchId);
+            
+            if (match && (!match.matchData || match.status === 'pending')) {
+              console.log(`Recovering match ${matchId} from backup`);
+              
+              // Update match with recovered data
+              const updatedMatches = tournament.matches.map(m => 
+                m.id === matchId 
+                  ? { ...m, status: 'paused' as const, matchData: backup.matchData }
+                  : m
+              );
+              
+              const updatedTournament = {
+                ...tournament,
+                matches: updatedMatches,
+              };
+              
+              onTournamentUpdate(updatedTournament);
+              
+              toast({
+                title: "Match Data Recovered",
+                description: `Recovered data for match ${match.matchNumber}`,
+              });
+            }
+          } catch (error) {
+            console.error('Error recovering match from backup:', error);
+          }
+        });
+      }
+    };
+    
+    recoverLostMatches();
+  }, [tournament.id, tournament.matches, onTournamentUpdate, toast]);
+
+  useEffect(() => {
+    // Periodic auto-save during active match play
+    if (currentMatch && currentMatch.status === 'inprogress') {
+      const interval = setInterval(() => {
+        console.log('Auto-saving match data...');
+        autoSaveMatch(currentMatch);
+      }, 30000); // Save every 30 seconds
+      
+      return () => clearInterval(interval);
+    }
+  }, [currentMatch]);
 
   const calculatePlayerStats = () => {
     const stats: PlayerStats[] = [];
@@ -228,57 +292,26 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
   };
 
   const startMatch = (match: TournamentMatch) => {
-    // Check if match is already in progress
-    if (match.status === 'inprogress') {
-      // Resume existing match
-      if (match.matchData) {
-        setCurrentMatch(match.matchData);
-        return;
-      }
-    }
-    
-    setSelectedMatch(match);
-    setShowMatchForm(true);
+    setCurrentTournamentMatchId(match.id);
+    resumeMatch(match);
   };
 
-  const resumeMatch = (match: TournamentMatch) => {
-    if (match.matchData) {
-      setCurrentMatch(match.matchData);
-    }
-  };
-
-  const pauseMatch = () => {
-    if (currentMatch) {
-      // Update the tournament match status to inprogress (so it can be resumed)
-      const updatedMatches = tournament.matches.map(m => 
-        m.id === currentMatch.id 
-          ? { ...m, status: 'inprogress' as const, matchData: currentMatch }
-          : m
-      );
-
-      const updatedTournament = {
-        ...tournament,
-        matches: updatedMatches,
-      };
-
-      onTournamentUpdate(updatedTournament);
-      setCurrentMatch(null);
-      toast({
-        title: "Match Paused",
-        description: "You can resume this match later from the tournament dashboard.",
-      });
-    }
-  };
-
-  const handleNewMatch = (settings: MatchSettings) => {
+  const handleTossComplete = () => {
     if (!selectedMatch) return;
 
-    // Create players for the match from tournament teams
     const team1 = tournament.teams.find(t => t.id === selectedMatch.team1Id);
     const team2 = tournament.teams.find(t => t.id === selectedMatch.team2Id);
     
-    if (!team1 || !team2) return;
+    if (!team1 || !team2) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Could not find team information.",
+      });
+      return;
+    }
 
+    // Create players for the match from tournament teams
     const createMatchPlayers = (team: TournamentTeam) => {
       return team.players.map(playerId => {
         const defaultPlayer = DEFAULT_PLAYERS.find(p => p.id === playerId);
@@ -293,7 +326,169 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
             ballsFaced: 0,
             fours: 0,
             sixes: 0,
-            status: 'not out' as const,
+            status: 'not out' as 'not out' | 'out' | 'did not bat',
+            strikeRate: 0,
+          },
+          bowling: {
+            ballsBowled: 0,
+            runsConceded: 0,
+            maidens: 0,
+            wickets: 0,
+            economyRate: 0,
+          },
+        };
+      });
+    };
+
+    // Create teams with proper structure (ID 0 and 1 as expected by the system)
+    const matchTeam1 = {
+      id: 0,
+      name: team1.name,
+      players: createMatchPlayers(team1),
+      impactPlayerUsed: false,
+    };
+
+    const matchTeam2 = {
+      id: 1,
+      name: team2.name,
+      players: createMatchPlayers(team2),
+      impactPlayerUsed: false,
+    };
+
+    // Ensure we have at least 2 players for batting and 1 for bowling
+    if (matchTeam1.players.length < 2 || matchTeam2.players.length < 1) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Teams need at least 2 players for batting and 1 for bowling.",
+      });
+      return;
+    }
+
+    let firstBattingTeam, firstBowlingTeam;
+    if ((tossWinner === team1.name && tossDecision === 'bat') || (tossWinner === team2.name && tossDecision === 'bowl')) {
+      firstBattingTeam = matchTeam1;
+      firstBowlingTeam = matchTeam2;
+    } else {
+      firstBattingTeam = matchTeam2;
+      firstBowlingTeam = matchTeam1;
+    }
+
+    // Set initial batting status for first 11 players (or all if less than 11)
+    const maxBattingPlayers = Math.min(11, firstBattingTeam.players.length);
+    firstBattingTeam.players.forEach((p, i) => {
+      p.batting.status = (i >= maxBattingPlayers ? 'did not bat' : 'not out') as 'not out' | 'out' | 'did not bat';
+    });
+
+    // Set substitute status for players beyond 11
+    firstBattingTeam.players.forEach((p, i) => {
+      p.isSubstitute = i >= 11;
+    });
+    firstBowlingTeam.players.forEach((p, i) => {
+      p.isSubstitute = i >= 11;
+    });
+
+    const matchData: Match = {
+      id: `match_${Date.now()}`,
+      teams: [matchTeam1, matchTeam2],
+      oversPerInnings: tournament.settings.oversPerInnings,
+      toss: { winner: tossWinner, decision: tossDecision },
+      innings: [
+        {
+          battingTeam: firstBattingTeam,
+          bowlingTeam: firstBowlingTeam,
+          score: 0,
+          wickets: 0,
+          overs: 0,
+          ballsThisOver: 0,
+          timeline: [],
+          fallOfWickets: [],
+          currentPartnership: {
+            batsman1: firstBattingTeam.players[0]?.id || 0,
+            batsman2: firstBattingTeam.players[1]?.id || 0,
+            runs: 0,
+            balls: 0,
+          },
+          batsmanOnStrike: firstBattingTeam.players[0]?.id || 0,
+          batsmanNonStrike: firstBattingTeam.players[1]?.id || 0,
+          currentBowler: firstBowlingTeam.players[0]?.id || 0,
+          fieldPlacements: [],
+          isFreeHit: false,
+        }
+      ],
+      currentInnings: 1,
+      status: 'inprogress',
+      matchType: tournament.settings.matchType,
+    };
+
+    // Update match status to inprogress
+    const updatedMatches = tournament.matches.map(m => 
+      m.id === selectedMatch.id 
+        ? { ...m, status: 'inprogress' as const, matchData }
+        : m
+    );
+
+    const updatedTournament = {
+      ...tournament,
+      matches: updatedMatches,
+      status: 'active' as const,
+    };
+
+    onTournamentUpdate(updatedTournament);
+    setCurrentMatch(matchData);
+    setShowTossInterface(false);
+    setSelectedMatch(null);
+    setTossWinner('');
+    setTossDecision('bat');
+  };
+
+  const simulateToss = () => {
+    if (!selectedMatch) return;
+    
+    const team1 = tournament.teams.find(t => t.id === selectedMatch.team1Id);
+    const team2 = tournament.teams.find(t => t.id === selectedMatch.team2Id);
+    
+    if (!team1 || !team2) return;
+    
+    // Randomly select winner
+    const winner = Math.random() < 0.5 ? team1.name : team2.name;
+    setTossWinner(winner);
+    
+    toast({
+      title: "Coin Toss Result",
+      description: `${winner} won the toss!`,
+    });
+  };
+
+  const handleNewMatch = (match: TournamentMatch) => {
+    const team1 = tournament.teams.find(t => t.id === match.team1Id);
+    const team2 = tournament.teams.find(t => t.id === match.team2Id);
+    
+    if (!team1 || !team2) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Could not find team information.",
+      });
+      return;
+    }
+
+    // Create players for the match from tournament teams
+    const createMatchPlayers = (team: TournamentTeam) => {
+      return team.players.map(playerId => {
+        const defaultPlayer = DEFAULT_PLAYERS.find(p => p.id === playerId);
+        return {
+          id: playerId,
+          name: defaultPlayer?.name || 'Unknown Player',
+          rating: 75, // Default rating
+          isSubstitute: false,
+          isImpactPlayer: false,
+          batting: {
+            runs: 0,
+            ballsFaced: 0,
+            fours: 0,
+            sixes: 0,
+            status: 'not out' as 'not out' | 'out' | 'did not bat',
             strikeRate: 0,
           },
           bowling: {
@@ -333,13 +528,13 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
     }
 
     // Determine which team bats first based on toss
-    const firstBattingTeam = settings.toss.winner === team1.name ? matchTeam1 : matchTeam2;
-    const firstBowlingTeam = settings.toss.winner === team1.name ? matchTeam2 : matchTeam1;
+    const firstBattingTeam = matchTeam1; // Team 1 always bats first for simplicity
+    const firstBowlingTeam = matchTeam2;
 
     // Set initial batting status for first 11 players (or all if less than 11)
     const maxBattingPlayers = Math.min(11, firstBattingTeam.players.length);
     firstBattingTeam.players.forEach((p, i) => {
-      p.batting.status = i >= maxBattingPlayers ? 'did not bat' : 'not out';
+      p.batting.status = (i >= maxBattingPlayers ? 'did not bat' : 'not out') as 'not out' | 'out' | 'did not bat';
     });
 
     // Set substitute status for players beyond 11
@@ -351,10 +546,10 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
     });
 
     const matchData: Match = {
-      id: selectedMatch.id,
+      id: `match_${Date.now()}`,
       teams: [matchTeam1, matchTeam2],
       oversPerInnings: tournament.settings.oversPerInnings,
-      toss: settings.toss,
+      toss: { winner: team1.name, decision: 'bat' },
       innings: [
         {
           battingTeam: firstBattingTeam,
@@ -383,26 +578,121 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
       matchType: tournament.settings.matchType,
     };
 
-    setCurrentMatch(matchData);
-    setShowMatchForm(false);
-    setSelectedMatch(null);
-
-    // Update the tournament match status to inprogress
+    // Update match status to inprogress
     const updatedMatches = tournament.matches.map(m => 
-      m.id === selectedMatch.id 
-        ? { ...m, status: 'inprogress' as const }
+      m.id === match.id 
+        ? { ...m, status: 'inprogress' as const, matchData }
         : m
     );
 
     const updatedTournament = {
       ...tournament,
       matches: updatedMatches,
+      status: 'active' as const,
     };
 
     onTournamentUpdate(updatedTournament);
+    setCurrentMatch(matchData);
+  };
+
+  const pauseMatch = () => {
+    if (!currentMatch) return;
+    
+    // Save current match data to localStorage as backup
+    const matchBackup = {
+      tournamentId: tournament.id,
+      matchId: currentMatch.id,
+      matchData: currentMatch,
+      timestamp: new Date().toISOString(),
+    };
+    
+    localStorage.setItem(`match_backup_${tournament.id}_${currentMatch.id}`, JSON.stringify(matchBackup));
+    
+    // Update tournament match with current data
+    const updatedMatches = tournament.matches.map(m => 
+      m.id === currentMatch.id 
+        ? { ...m, status: 'paused' as const, matchData: currentMatch }
+        : m
+    );
+    
+    const updatedTournament = {
+      ...tournament,
+      matches: updatedMatches,
+    };
+    
+    onTournamentUpdate(updatedTournament);
+    
+    // Go back to tournament view
+    setCurrentMatch(null);
+    
+    toast({
+      title: "Match Paused",
+      description: "Match data has been saved. You can resume it later.",
+    });
+  };
+
+  const resumeMatch = (match: TournamentMatch) => {
+    if (match.status === 'paused' && match.matchData) {
+      // Resume paused match
+      setCurrentMatch(match.matchData);
+    } else if (match.status === 'inprogress' && match.matchData) {
+      // Resume in-progress match
+      setCurrentMatch(match.matchData);
+    } else {
+      // Check localStorage for backup
+      const backupKey = `match_backup_${tournament.id}_${match.id}`;
+      const backupData = localStorage.getItem(backupKey);
+      
+      if (backupData) {
+        try {
+          const backup = JSON.parse(backupData);
+          if (backup.matchData) {
+            console.log('Restoring match from localStorage backup');
+            setCurrentMatch(backup.matchData);
+            
+            // Update tournament with restored data
+            const updatedMatches = tournament.matches.map(m => 
+              m.id === match.id 
+                ? { ...m, status: 'inprogress' as const, matchData: backup.matchData }
+                : m
+            );
+            
+            const updatedTournament = {
+              ...tournament,
+              matches: updatedMatches,
+            };
+            
+            onTournamentUpdate(updatedTournament);
+            
+            toast({
+              title: "Match Restored",
+              description: "Match data has been restored from backup.",
+            });
+            return;
+          }
+        } catch (error) {
+          console.error('Error restoring match from backup:', error);
+        }
+      }
+      
+      // Show toss interface for new match
+      setSelectedMatch(match);
+      setShowTossInterface(true);
+    }
   };
 
   const endMatch = (matchResult: Match) => {
+    if (!currentTournamentMatchId) {
+      console.error('No current tournament match ID context for ending match');
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Could not end match due to missing context.",
+      });
+      return;
+    }
+    console.log('Ending match:', currentTournamentMatchId, 'with data:', matchResult);
+    
     // Calculate match result
     let matchResultText = '';
     let winnerTeamName: string | null = null;
@@ -429,12 +719,26 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
       matchResultText = `${team1Name} scored ${team1Score} runs`;
     }
 
+    // Find the tournament match to get the round information
+    const tournamentMatch = tournament.matches.find(m => m.id === currentTournamentMatchId);
+    if (!tournamentMatch) {
+      console.error('Tournament match not found for match ID:', currentTournamentMatchId);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Could not find tournament match data.",
+      });
+      return;
+    }
+
+    console.log('Tournament match found:', tournamentMatch.round, 'status:', tournamentMatch.status);
+
     // Persist player histories
     updatePlayerHistoriesFromMatch(matchResult, tournament.id);
 
     // Update tournament match status with result
     const updatedMatches = tournament.matches.map(m => 
-      m.id === matchResult.id 
+      m.id === tournamentMatch.id 
         ? { 
             ...m, 
             status: 'finished' as const, 
@@ -447,7 +751,8 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
         : m
     );
 
-    const thisMatch = updatedMatches.find(m => m.id === matchResult.id)!;
+    const thisMatch = updatedMatches.find(m => m.id === tournamentMatch.id)!;
+    console.log('Updated match:', thisMatch.round, 'winner:', thisMatch.winnerTeamId);
 
     // Calculate team performance from match data
     const updatedTeams = tournament.teams.map(team => {
@@ -556,25 +861,29 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
     // Progress winners/losers through playoffs
     if (thisMatch.round === 'qualifier1' && q1 && finalMatch && q2 && thisMatch.winnerTeamId && thisMatch.loserTeamId) {
       // Q1 winner to Final, loser to Qualifier 2
-      finalMatch.team1Id = thisMatch.winnerTeamId; finalMatch.team1Name = tournament.teams.find(t => t.id === thisMatch.winnerTeamId)?.name || 'TBD';
-      q2.team2Id = thisMatch.loserTeamId; q2.team2Name = tournament.teams.find(t => t.id === thisMatch.loserTeamId)?.name || 'TBD';
+      finalMatch.team1Id = thisMatch.winnerTeamId; 
+      finalMatch.team1Name = tournament.teams.find(t => t.id === thisMatch.winnerTeamId)?.name || 'TBD';
+      q2.team2Id = thisMatch.loserTeamId; 
+      q2.team2Name = tournament.teams.find(t => t.id === thisMatch.loserTeamId)?.name || 'TBD';
     }
 
     if (thisMatch.round === 'eliminator' && elim && q2 && thisMatch.winnerTeamId) {
       // Eliminator winner to Qualifier 2
-      q2.team1Id = thisMatch.winnerTeamId; q2.team1Name = tournament.teams.find(t => t.id === thisMatch.winnerTeamId)?.name || 'TBD';
+      q2.team1Id = thisMatch.winnerTeamId; 
+      q2.team1Name = tournament.teams.find(t => t.id === thisMatch.winnerTeamId)?.name || 'TBD';
     }
 
     if (thisMatch.round === 'qualifier2' && q2 && finalMatch && thisMatch.winnerTeamId) {
       // Qualifier 2 winner to Final (second slot)
-      finalMatch.team2Id = thisMatch.winnerTeamId; finalMatch.team2Name = tournament.teams.find(t => t.id === thisMatch.winnerTeamId)?.name || 'TBD';
+      finalMatch.team2Id = thisMatch.winnerTeamId; 
+      finalMatch.team2Name = tournament.teams.find(t => t.id === thisMatch.winnerTeamId)?.name || 'TBD';
     }
 
     const updatedTournament = {
       ...tournament,
       matches: updatedMatches,
       teams: updatedTeams,
-      status: completedGroupMatches.length === groupMatches.length ? 'active' : 'draft',
+      status: (completedGroupMatches.length === groupMatches.length ? 'active' : 'draft') as 'draft' | 'active' | 'completed',
     };
 
     // Persist Player of Series when tournament completes (final finished)
@@ -591,12 +900,48 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
       updatedTournament.status = 'completed';
     }
 
+    console.log('Updating tournament with completed match');
     onTournamentUpdate(updatedTournament);
     setCurrentMatch(null);
     toast({
       title: "Match Completed",
       description: `Match finished: ${matchResultText}`,
     });
+  };
+
+  const safeEndMatch = (matchResult: Match) => {
+    try {
+      console.log('Attempting to end match safely...');
+      endMatch(matchResult);
+    } catch (error) {
+      console.error('Error in endMatch, attempting fallback:', error);
+      
+      // Fallback: just save the match data and mark as finished
+      const updatedMatches = tournament.matches.map(m => 
+        m.id === matchResult.id 
+          ? { 
+              ...m, 
+              status: 'finished' as const, 
+              matchData: matchResult,
+              result: 'Match completed (fallback)',
+              completedDate: new Date(),
+            }
+          : m
+      );
+      
+      const updatedTournament = {
+        ...tournament,
+        matches: updatedMatches,
+      };
+      
+      onTournamentUpdate(updatedTournament);
+      setCurrentMatch(null);
+      
+      toast({
+        title: "Match Completed (Fallback)",
+        description: "Match finished using fallback method. Some features may be limited.",
+      });
+    }
   };
 
   const getTopPlayers = (category: 'batting' | 'bowling') => {
@@ -620,11 +965,114 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
   const lastMatchFantasy = lastFinished ? computeFantasyPointsForMatch(lastFinished.matchData as Match) : [];
   const tournamentFantasy = computeFantasyPointsForTournament(tournament.matches);
 
+  const autoSaveMatch = (matchData: Match) => {
+    if (!matchData || !currentTournamentMatchId) return;
+    
+    // Save to localStorage as backup
+    const matchBackup = {
+      tournamentId: tournament.id,
+      matchId: currentTournamentMatchId,
+      matchData: matchData,
+      timestamp: new Date().toISOString(),
+    };
+    
+    localStorage.setItem(`match_backup_${tournament.id}_${currentTournamentMatchId}`, JSON.stringify(matchBackup));
+    
+    // Update tournament match data
+    const updatedMatches = tournament.matches.map(m => 
+      m.id === currentTournamentMatchId 
+        ? { ...m, matchData: matchData }
+        : m
+    );
+    
+    const updatedTournament = {
+      ...tournament,
+      matches: updatedMatches,
+    };
+    
+    // Update local state immediately (don't wait for API)
+    onTournamentUpdate(updatedTournament);
+
+    // Persist to backend
+    fetch(`/api/tournaments/${tournament.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ matches: updatedMatches }),
+    }).catch(error => console.error('Failed to auto-save match to backend:', error));
+  };
+
+  const recoverLostMatchData = () => {
+    const keys = Object.keys(localStorage);
+    const matchBackupKeys = keys.filter(key => key.startsWith(`match_backup_${tournament.id}_`));
+    
+    if (matchBackupKeys.length === 0) {
+      toast({
+        title: "No Backups Found",
+        description: "No match backups found in localStorage.",
+      });
+      return;
+    }
+    
+    let recoveredCount = 0;
+    matchBackupKeys.forEach(key => {
+      try {
+        const backup = JSON.parse(localStorage.getItem(key)!);
+        const matchId = backup.matchId;
+        const match = tournament.matches.find(m => m.id === matchId);
+        
+        if (match && (!match.matchData || match.status === 'pending')) {
+          console.log(`Recovering match ${matchId} from backup`);
+          
+          // Update match with recovered data
+          const updatedMatches = tournament.matches.map(m => 
+            m.id === matchId 
+              ? { ...m, status: 'paused' as const, matchData: backup.matchData }
+              : m
+          );
+          
+          const updatedTournament = {
+            ...tournament,
+            matches: updatedMatches,
+          };
+          
+          onTournamentUpdate(updatedTournament);
+          recoveredCount++;
+        }
+      } catch (error) {
+        console.error('Error recovering match from backup:', error);
+      }
+    });
+    
+    if (recoveredCount > 0) {
+      toast({
+        title: "Data Recovery Complete",
+        description: `Successfully recovered ${recoveredCount} match(es) from backup.`,
+      });
+    } else {
+      toast({
+        title: "No Recovery Needed",
+        description: "All matches are already up to date.",
+      });
+    }
+  };
+
+  const handleBackToTournament = () => {
+    if (currentMatch && currentMatch.status === 'inprogress') {
+      // Auto-save before leaving
+      autoSaveMatch(currentMatch);
+      toast({
+        title: "Match Auto-Saved",
+        description: "Match data has been automatically saved before leaving.",
+      });
+    }
+    setCurrentMatch(null);
+  };
+
   if (currentMatch) {
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <Button variant="outline" onClick={() => setCurrentMatch(null)}>
+          <Button variant="outline" onClick={handleBackToTournament}>
             ← Back to Tournament
           </Button>
           <div className="flex items-center gap-2">
@@ -632,12 +1080,31 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
             <Button variant="outline" onClick={pauseMatch} size="sm">
               Pause Match
             </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                if (currentMatch) {
+                  autoSaveMatch(currentMatch);
+                  toast({
+                    title: "Match Saved",
+                    description: "Match data has been saved to backup.",
+                  });
+                }
+              }} 
+              size="sm"
+            >
+              Save Match
+            </Button>
           </div>
         </div>
         <ScoringInterface 
           match={currentMatch} 
-          setMatch={(match) => setCurrentMatch(match)} 
-          endMatch={() => endMatch(currentMatch)}
+          setMatch={(match) => {
+            setCurrentMatch(match);
+            // Auto-save after every change
+            autoSaveMatch(match);
+          }} 
+          endMatch={() => safeEndMatch(currentMatch)}
         />
       </div>
     );
@@ -671,7 +1138,7 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
             </div>
             
             <NewMatchForm 
-              onNewMatch={handleNewMatch}
+              onNewMatch={(settings) => handleNewMatch({ ...selectedMatch, ...settings } as TournamentMatch)}
               prefillSettings={{
                 teamNames: [team1.name, team2.name] as [string, string],
                 oversPerInnings: tournament.settings.oversPerInnings,
@@ -685,15 +1152,127 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
     );
   }
 
+  if (showTossInterface && selectedMatch) {
+    const team1 = tournament.teams.find(t => t.id === selectedMatch.team1Id);
+    const team2 = tournament.teams.find(t => t.id === selectedMatch.team2Id);
+    
+    if (!team1 || !team2) return null;
+
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <Button variant="outline" onClick={() => setShowTossInterface(false)}>
+            ← Back to Tournament
+          </Button>
+          <h2 className="text-xl font-semibold">Toss & Decision</h2>
+        </div>
+        
+        <Card className="max-w-2xl mx-auto shadow-lg bg-card/50 border-primary/20">
+          <CardContent className="p-6">
+            <div className="text-center mb-6">
+              <h3 className="text-lg font-semibold mb-4">Match Setup</h3>
+              <div className="flex items-center justify-center gap-4 mb-4">
+                <div className="text-center">
+                  {team1.logo ? (
+                    <img src={team1.logo} alt={`${team1.name} logo`} className="w-16 h-16 mx-auto mb-2" />
+                  ) : (
+                    <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center text-2xl font-bold mx-auto mb-2">
+                      {team1.name.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <p className="font-semibold">{team1.name}</p>
+                </div>
+                <div className="text-2xl font-bold text-muted-foreground">vs</div>
+                <div className="text-center">
+                  {team2.logo ? (
+                    <img src={team2.logo} alt={`${team2.name} logo`} className="w-16 h-16 mx-auto mb-2" />
+                  ) : (
+                    <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center text-2xl font-bold mx-auto mb-2">
+                      {team2.name.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <p className="font-semibold">{team2.name}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="text-center">
+                <Button 
+                  variant="outline" 
+                  onClick={simulateToss}
+                  className="mb-4"
+                  disabled={!!tossWinner}
+                >
+                  🪙 Simulate Coin Toss
+                </Button>
+                
+                {tossWinner && (
+                  <div className="bg-muted/50 rounded-lg p-4 mb-4">
+                    <p className="text-lg font-semibold text-green-600 mb-2">
+                      {tossWinner} won the toss!
+                    </p>
+                    <p className="text-muted-foreground mb-3">
+                      What would you like to do?
+                    </p>
+                    <div className="flex justify-center gap-3">
+                      <Button
+                        variant={tossDecision === 'bat' ? 'default' : 'outline'}
+                        onClick={() => setTossDecision('bat')}
+                        className="min-w-[100px]"
+                      >
+                        🏏 Bat First
+                      </Button>
+                      <Button
+                        variant={tossDecision === 'bowl' ? 'default' : 'outline'}
+                        onClick={() => setTossDecision('bowl')}
+                        className="min-w-[100px]"
+                      >
+                        🏐 Bowl First
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                <Button 
+                  onClick={handleTossComplete}
+                  disabled={!tossWinner}
+                  className="w-full"
+                >
+                  Start Match
+                </Button>
+              </div>
+
+              <div className="text-sm text-muted-foreground text-center">
+                <p>• Click "Simulate Coin Toss" to randomly determine the toss winner</p>
+                <p>• Choose whether the winning team bats or bowls first</p>
+                <p>• Click "Start Match" to begin the game</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <Button variant="outline" onClick={onBackToTournaments}>
-          ← Back to Tournaments
-        </Button>
-        <div className="text-right">
+      <div className="flex items-center justify-between mb-4">
+        <div>
           <h1 className="text-2xl font-bold">{tournament.name}</h1>
           <p className="text-muted-foreground">{tournament.description}</p>
+        </div>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={recoverLostMatchData}
+          >
+            Recover Lost Data
+          </Button>
+          <Button variant="outline" onClick={onBackToTournaments}>
+            ← Back to Tournaments
+          </Button>
         </div>
       </div>
 
@@ -779,8 +1358,12 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
                   <div className="grid grid-cols-2 gap-2">
                     {tournament.teams.map(team => (
                       <div key={team.id} className="flex items-center gap-2">
-                        {team.logo && (
-                          <img src={team.logo} alt={`${team.name} logo`} className="w-4 h-4" />
+                        {team.logo ? (
+                          <img src={team.logo} alt={`${team.name} logo`} className="w-5 h-5 rounded" />
+                        ) : (
+                          <div className="w-5 h-5 bg-muted rounded-full flex items-center justify-center text-xs font-bold">
+                            {team.name.charAt(0).toUpperCase()}
+                          </div>
                         )}
                         <span className="text-sm">{team.name}</span>
                       </div>
@@ -1095,11 +1678,22 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
                     .map((team, index) => (
                       <TableRow key={team.id}>
                         <TableCell className="font-medium">{index + 1}</TableCell>
-                        <TableCell className="flex items-center gap-2">
-                          {team.logo && (
-                            <img src={team.logo} alt={`${team.name} logo`} className="w-6 h-6 rounded" />
-                          )}
-                          {team.name}
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            {team.logo ? (
+                              <img src={team.logo} alt={`${team.name} logo`} className="w-8 h-8 rounded" />
+                            ) : (
+                              <div className="w-8 h-8 bg-muted rounded-full flex items-center justify-center text-sm font-bold">
+                                {team.name.charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                            <div>
+                              <div className="font-medium">{team.name}</div>
+                              {team.homeGround && (
+                                <div className="text-xs text-muted-foreground">{team.homeGround}</div>
+                              )}
+                            </div>
+                          </div>
                         </TableCell>
                         <TableCell>{team.matchesPlayed}</TableCell>
                         <TableCell>{team.matchesWon}</TableCell>
@@ -1115,88 +1709,280 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
           </Card>
         </TabsContent>
 
-        <TabsContent value="matches">
+        <TabsContent value="matches" className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle>Tournament Matches</CardTitle>
+              <CardDescription>
+                {tournament.settings.tournamentType === 'knockout' 
+                  ? 'Single elimination knockout tournament'
+                  : `Round robin tournament - each team plays ${tournament.settings.groupStageRounds} times`
+                }
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {tournament.matches.map(match => (
-                  <Card key={match.id} className="p-4">
-                    <div className="space-y-3">
-                      <div className="text-center">
-                        <Badge variant={match.round === 'final' ? 'default' : 'secondary'}>
-                          {match.round === 'final' ? 'Final' : `Match ${match.matchNumber}`}
-                        </Badge>
+              {/* Group matches by round */}
+              {(() => {
+                const groupMatches = tournament.matches.filter(m => m.round === 'group');
+                const playoffMatches = tournament.matches.filter(m => m.round !== 'group');
+                
+                // Group group stage matches by teams to avoid consecutive display
+                const teamMatchups = new Map<string, TournamentMatch[]>();
+                groupMatches.forEach(match => {
+                  const key = [match.team1Id, match.team2Id].sort().join('-');
+                  if (!teamMatchups.has(key)) {
+                    teamMatchups.set(key, []);
+                  }
+                  teamMatchups.get(key)!.push(match);
+                });
+
+                return (
+                  <div className="space-y-6">
+                    {/* Group Stage Matches */}
+                    <div>
+                      <h3 className="text-lg font-semibold mb-4 text-primary">Group Stage</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {Array.from(teamMatchups.values()).map((matchup, index) => {
+                          const firstMatch = matchup[0];
+                          const team1 = tournament.teams.find(t => t.id === firstMatch.team1Id);
+                          const team2 = tournament.teams.find(t => t.id === firstMatch.team2Id);
+                          
+                          return (
+                            <Card key={index} className="p-4">
+                              <div className="text-center mb-4">
+                                <div className="flex items-center justify-center gap-3 mb-2">
+                                  {/* Team 1 */}
+                                  <div className="flex flex-col items-center">
+                                    {team1?.logo ? (
+                                      <img src={team1.logo} alt={`${team1.name} logo`} className="w-12 h-12 mb-1" />
+                                    ) : (
+                                      <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center text-lg font-bold mb-1">
+                                        {team1?.name.charAt(0).toUpperCase()}
+                                      </div>
+                                    )}
+                                    <span className="text-sm font-medium">{team1?.name}</span>
+                                  </div>
+                                  
+                                  {/* VS */}
+                                  <div className="text-lg font-bold text-muted-foreground">vs</div>
+                                  
+                                  {/* Team 2 */}
+                                  <div className="flex flex-col items-center">
+                                    {team2?.logo ? (
+                                      <img src={team2.logo} alt={`${team2.name} logo`} className="w-12 h-12 mb-1" />
+                                    ) : (
+                                      <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center text-lg font-bold mb-1">
+                                        {team2?.name.charAt(0).toUpperCase()}
+                                      </div>
+                                    )}
+                                    <span className="text-sm font-medium">{team2?.name}</span>
+                                  </div>
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                  {matchup.length} match{matchup.length > 1 ? 'es' : ''}
+                                </p>
+                              </div>
+                              <div className="space-y-2">
+                                {matchup.map((match) => (
+                                  <div key={match.id} className="border rounded p-3 bg-muted/30">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <span className="text-xs font-medium">Match {match.matchNumber}</span>
+                                      <Badge 
+                                        variant={match.status === 'finished' ? 'default' : 
+                                                match.status === 'paused' ? 'secondary' : 
+                                                match.status === 'inprogress' ? 'outline' : 'outline'}
+                                        className="text-xs"
+                                      >
+                                        {match.status === 'finished' ? 'Finished' : 
+                                         match.status === 'paused' ? 'Paused' : 
+                                         match.status === 'inprogress' ? 'In Progress' : 'Pending'}
+                                      </Badge>
+                                    </div>
+                                    <div className="text-xs text-muted-foreground mb-2">
+                                      Venue: {match.venue}
+                                    </div>
+                                    {match.status === 'finished' && match.result && (
+                                      <div className="text-xs font-medium text-green-600 mb-2">
+                                        {match.result}
+                                      </div>
+                                    )}
+                                    <div className="flex gap-2">
+                                      {match.status === 'pending' && (
+                                        <Button 
+                                          size="sm" 
+                                          className="flex-1"
+                                          onClick={() => startMatch(match)}
+                                        >
+                                          Start Match
+                                        </Button>
+                                      )}
+                                      {match.status === 'paused' && (
+                                        <Button 
+                                          size="sm" 
+                                          variant="default"
+                                          className="flex-1"
+                                          onClick={() => startMatch(match)}
+                                        >
+                                          Resume Match
+                                        </Button>
+                                      )}
+                                      {match.status === 'inprogress' && (
+                                        <Button 
+                                          size="sm" 
+                                          variant="secondary"
+                                          className="flex-1"
+                                          onClick={() => startMatch(match)}
+                                        >
+                                          Continue Match
+                                        </Button>
+                                      )}
+                                      {match.status === 'finished' && match.matchData && (
+                                        <MatchScorecardDialog
+                                          match={match.matchData}
+                                          trigger={
+                                            <Button size="sm" variant="outline" className="flex-1">
+                                              View Scorecard
+                                            </Button>
+                                          }
+                                        />
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </Card>
+                          );
+                        })}
                       </div>
-                      
-                      <div className="text-center space-y-1">
-                        <p className="font-semibold">{match.team1Name}</p>
-                        <p className="text-muted-foreground">vs</p>
-                        <p className="font-semibold">{match.team2Name}</p>
-                        {match.venue && (
-                          <p className="text-xs text-muted-foreground">Venue: {match.venue}</p>
-                        )}
-                      </div>
-
-                      <div className="flex items-center justify-center gap-2">
-                        {match.status === 'pending' && (
-                          <>
-                            <Clock className="w-4 h-4 text-muted-foreground" />
-                            <span className="text-sm text-muted-foreground">Pending</span>
-                          </>
-                        )}
-                        {match.status === 'inprogress' && (
-                          <>
-                            <Play className="w-4 h-4 text-green-500" />
-                            <span className="text-sm text-green-600">Live</span>
-                          </>
-                        )}
-                        {match.status === 'finished' && (
-                          <>
-                            <CheckCircle className="w-4 h-4 text-blue-500" />
-                            <span className="text-sm text-blue-600">Completed</span>
-                          </>
-                        )}
-                      </div>
-
-                      {match.status === 'pending' && (
-                        <Button 
-                          onClick={() => startMatch(match)}
-                          className="w-full"
-                          size="sm"
-                        >
-                          Start Match
-                        </Button>
-                      )}
-
-                      {match.status === 'inprogress' && (
-                        <Button 
-                          onClick={() => resumeMatch(match)}
-                          className="w-full"
-                          size="sm"
-                        >
-                          Resume Match
-                        </Button>
-                      )}
-
-                      {match.status === 'finished' && match.result && (
-                        <p className="text-sm text-center text-muted-foreground">
-                          {match.result}
-                        </p>
-                      )}
-
-                      {match.status === 'finished' && (
-                        <MatchScorecardDialog 
-                          match={match.matchData as any}
-                          trigger={<Button variant="outline" className="w-full" size="sm">View Scorecard</Button>}
-                        />
-                      )}
                     </div>
-                  </Card>
-                ))}
-              </div>
+
+                    {/* Playoff Matches */}
+                    {playoffMatches.length > 0 && (
+                      <div>
+                        <h3 className="text-lg font-semibold mb-4 text-primary">Playoffs & Finals</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {playoffMatches.map((match) => {
+                            const team1 = tournament.teams.find(t => t.id === match.team1Id);
+                            const team2 = tournament.teams.find(t => t.id === match.team2Id);
+                            
+                            return (
+                              <Card key={match.id} className="p-4">
+                                <div className="text-center mb-4">
+                                  <h4 className="font-semibold text-sm text-muted-foreground mb-3">
+                                    {match.round === 'qualifier1' ? 'Qualifier 1' :
+                                     match.round === 'eliminator' ? 'Eliminator' :
+                                     match.round === 'qualifier2' ? 'Qualifier 2' :
+                                     match.round === 'final' ? 'Final' : match.round}
+                                  </h4>
+                                  
+                                  {match.team1Name === 'TBD' ? (
+                                    <div className="text-sm text-muted-foreground">
+                                      Teams TBD
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center justify-center gap-3">
+                                      {/* Team 1 */}
+                                      <div className="flex flex-col items-center">
+                                        {team1?.logo ? (
+                                          <img src={team1.logo} alt={`${team1.name} logo`} className="w-12 h-12 mb-1" />
+                                        ) : (
+                                          <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center text-lg font-bold mb-1">
+                                            {team1?.name.charAt(0).toUpperCase()}
+                                          </div>
+                                        )}
+                                        <span className="text-sm font-medium">{team1?.name}</span>
+                                      </div>
+                                      
+                                      {/* VS */}
+                                      <div className="text-lg font-bold text-muted-foreground">vs</div>
+                                      
+                                      {/* Team 2 */}
+                                      <div className="flex flex-col items-center">
+                                        {team2?.logo ? (
+                                          <img src={team2.logo} alt={`${team2.name} logo`} className="w-12 h-12 mb-1" />
+                                        ) : (
+                                          <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center text-lg font-bold mb-1">
+                                            {team2?.name.charAt(0).toUpperCase()}
+                                          </div>
+                                        )}
+                                        <span className="text-sm font-medium">{team2?.name}</span>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="border rounded p-3 bg-muted/30">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <span className="text-xs font-medium">Match {match.matchNumber}</span>
+                                    <Badge 
+                                      variant={match.status === 'finished' ? 'default' : 
+                                              match.status === 'paused' ? 'secondary' : 
+                                              match.status === 'inprogress' ? 'outline' : 'outline'}
+                                      className="text-xs"
+                                    >
+                                      {match.status === 'finished' ? 'Finished' : 
+                                       match.status === 'paused' ? 'Paused' : 
+                                       match.status === 'inprogress' ? 'In Progress' : 'Pending'}
+                                    </Badge>
+                                  </div>
+                                  <div className="text-xs text-muted-foreground mb-2">
+                                    Venue: {match.venue}
+                                  </div>
+                                  {match.status === 'finished' && match.result && (
+                                    <div className="text-xs font-medium text-green-600 mb-2">
+                                      {match.result}
+                                    </div>
+                                  )}
+                                  <div className="flex gap-2">
+                                    {match.status === 'pending' && match.team1Name !== 'TBD' && (
+                                      <Button 
+                                        size="sm" 
+                                        className="flex-1"
+                                        onClick={() => startMatch(match)}
+                                      >
+                                        Start Match
+                                      </Button>
+                                    )}
+                                    {match.status === 'paused' && (
+                                      <Button 
+                                        size="sm" 
+                                        variant="default"
+                                        className="flex-1"
+                                        onClick={() => startMatch(match)}
+                                      >
+                                        Resume Match
+                                      </Button>
+                                    )}
+                                    {match.status === 'inprogress' && (
+                                      <Button 
+                                        size="sm" 
+                                        variant="secondary"
+                                        className="flex-1"
+                                        onClick={() => startMatch(match)}
+                                      >
+                                        Continue Match
+                                      </Button>
+                                    )}
+                                    {match.status === 'finished' && match.matchData && (
+                                      <MatchScorecardDialog
+                                        match={match.matchData}
+                                        trigger={
+                                          <Button size="sm" variant="outline" className="flex-1">
+                                            View Scorecard
+                                          </Button>
+                                        }
+                                      />
+                                    )}
+                                  </div>
+                                </div>
+                              </Card>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
         </TabsContent>
@@ -1261,9 +2047,41 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
                         )}
                       </div>
                       <div className="text-center space-y-1">
-                        <p className="font-semibold">{match.team1Name}</p>
+                        <div className="flex items-center justify-center gap-2">
+                          {(() => {
+                            const team1 = tournament.teams.find(t => t.name === match.team1Name);
+                            return (
+                              <div className="flex items-center gap-1">
+                                {team1?.logo ? (
+                                  <img src={team1.logo} alt={`${team1.name} logo`} className="w-4 h-4 rounded" />
+                                ) : (
+                                  <div className="w-4 h-4 bg-muted rounded-full flex items-center justify-center text-xs font-bold">
+                                    {team1?.name.charAt(0).toUpperCase()}
+                                  </div>
+                                )}
+                                <p className="font-semibold">{match.team1Name}</p>
+                              </div>
+                            );
+                          })()}
+                        </div>
                         <p className="text-muted-foreground">vs</p>
-                        <p className="font-semibold">{match.team2Name}</p>
+                        <div className="flex items-center justify-center gap-2">
+                          {(() => {
+                            const team2 = tournament.teams.find(t => t.name === match.team2Name);
+                            return (
+                              <div className="flex items-center gap-1">
+                                {team2?.logo ? (
+                                  <img src={team2.logo} alt={`${team2.name} logo`} className="w-4 h-4 rounded" />
+                                ) : (
+                                  <div className="w-4 h-4 bg-muted rounded-full flex items-center justify-center text-xs font-bold">
+                                    {team2?.name.charAt(0).toUpperCase()}
+                                  </div>
+                                )}
+                                <p className="font-semibold">{match.team2Name}</p>
+                              </div>
+                            );
+                          })()}
+                        </div>
                         {match.completedDate && (
                           <p className="text-xs text-muted-foreground">{new Date(match.completedDate).toLocaleString()}</p>
                         )}

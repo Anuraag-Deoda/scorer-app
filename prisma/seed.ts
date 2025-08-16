@@ -3,55 +3,127 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
-  // Create Teams
-  const rupeshGiants = await prisma.team.create({
-    data: {
-      name: 'Rupesh Giants',
-      players: {
-        create: [
-          { name: 'Siddharth', rating: 85 },
-          { name: 'Rupesh', rating: 90 },
-          { name: 'Prashant', rating: 92 },
-          { name: 'Sushant', rating: 88 },
-          { name: 'Sujit', rating: 82 },
-          { name: 'Sajeesh', rating: 78 },
-          { name: 'Vicky', rating: 75 },
-          { name: 'Vivek', rating: 76 },
-          { name: 'Pratik', rating: 79 },
-          { name: 'Ashish', rating: 77 },
-          { name: 'Yogesh', rating: 74 },
-        ],
-      },
-    },
-  });
+  console.log('🌱 Seeding database...');
 
-  const prashantSuperKings = await prisma.team.create({
-    data: {
-      name: 'Prashant Super Kings',
-      players: {
-        create: [
-          { name: 'Anuraag', rating: 89 },
-          { name: 'Harshal', rating: 87 },
-          { name: 'Amaan', rating: 84 },
-          { name: 'Siddhu', rating: 81 },
-          { name: 'Jay', rating: 80 },
-          { name: 'Sani', rating: 79 },
-          { name: 'Ruzda', rating: 77 },
-          { name: 'Aashif', rating: 76 },
-          { name: 'Kunal', rating: 75 },
-          { name: 'Mitesh', rating: 73 },
-          { name: 'Sandesh', rating: 72 },
-        ],
-      },
-    },
-  });
+  // Create players
+  const players = [
+    { name: "Prashant" },
+    { name: "Ashish" },
+    { name: "Sonal J" },
+    { name: "Vicky" },
+    { name: "Jay" },
+    { name: "Amaan" },
+    { name: "Anish" },
+    { name: "Sajeesh" },
+    { name: "Rohan" },
+    { name: "Vivek" },
+    { name: "Sujit" },
+    { name: "Kunal" },
+    { name: "Kashmira" },
+    { name: "Ismail" },
+    { name: "Anuraag" },
+    { name: "Divyesh" },
+    { name: "Ruzda" },
+    { name: "Harshal" },
+    { name: "Riyaz" },
+    { name: "Suyog" },
+    { name: "Sandesh" },
+    { name: "Roshan" },
+    { name: "Siddhu" },
+    { name: "Vipul" },
+    { name: "Yash" },
+    { name: "IT Prathamesh" },
+    { name: "Rupesh" },
+    { name: "Manoj" },
+    { name: "Mitesh" },
+    { name: "Pratik" },
+    { name: "Prathamesh D" },
+    { name: "Sani" },
+    { name: "Aasif" },
+    { name: "Ashok" },
+    { name: "Sushant" },
+    { name: "Venu" },
+    { name: "Ishant" },
+    { name: "Vishal M" },
+    { name: "Saurabh" },
+    { name: "Akshata" },
+    { name: "Yogesh" },
+    { name: "aby thomas" },
+    { name: "nitin s" },
+    { name: "imran k" },
+    { name: "amit" },
+    { name: "apeksha" },
+    { name: "pranali" },
+    { name: "mayuresh" },
+    { name: "mahesh" },
+    { name: "sagar" },
+    { name: "rohit" },
+    { name: "rahul b" },
+    { name: "shivam" },
+    { name: "Wasique Shaikh" },
+    { name: "Sonal Sheth" },
+    { name: "ravindra" },
+    { name: "rohit d" },
+    { name: "Omkar" },
+    { name: "Hricha" },
+    { name: "Samyak" },
+    { name: "Punit" },
+    { name: "Rahul A" },
+    { name: "Tausif" },
+    { name: "Rajesh" },
+    { name: "Priyanka" }
+  ];
 
-  console.log({ rupeshGiants, prashantSuperKings });
+  console.log('Creating players...');
+  try {
+    await prisma.player.createMany({
+      data: players,
+      skipDuplicates: true,
+    });
+  } catch (error) {
+    console.log('Players already exist, skipping...');
+  }
+
+  // Create some sample teams
+  const teams = [
+    {
+      name: "Mumbai Indians",
+      homeGround: "Wankhede Stadium",
+      logo: null, // Will be added later if needed
+    },
+    {
+      name: "Chennai Super Kings",
+      homeGround: "M. A. Chidambaram Stadium",
+      logo: null,
+    },
+    {
+      name: "Royal Challengers Bangalore",
+      homeGround: "M. Chinnaswamy Stadium",
+      logo: null,
+    },
+    {
+      name: "Kolkata Knight Riders",
+      homeGround: "Eden Gardens",
+      logo: null,
+    },
+  ];
+
+  console.log('Creating teams...');
+  try {
+    await prisma.team.createMany({
+      data: teams,
+      skipDuplicates: true,
+    });
+  } catch (error) {
+    console.log('Teams already exist, skipping...');
+  }
+
+  console.log('✅ Database seeded successfully!');
 }
 
 main()
   .catch((e) => {
-    console.error(e);
+    console.error('❌ Error seeding database:', e);
     process.exit(1);
   })
   .finally(async () => {

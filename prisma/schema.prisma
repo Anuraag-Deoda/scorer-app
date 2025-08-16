@@ -16,17 +16,95 @@ model Player {
   ballsBatted Ball[] @relation("Batsman")
   ballsBowled Ball[] @relation("Bowler")
   ballsFielded Ball[] @relation("Fielder")
+  tournamentTeamPlayers TournamentTeamPlayer[]
 }
 
 model Team {
   id        Int       @id @default(autoincrement())
   name      String
+  logo      String?   // SVG or PNG logo data as base64 string
+  homeGround String?
   teamPlayers TeamPlayer[]
   matchesAsTeam1 Match[] @relation("Team1")
   matchesAsTeam2 Match[] @relation("Team2")
   battingInnings Innings[] @relation("BattingTeam")
   bowlingInnings Innings[] @relation("BowlingTeam")
   playerStats PlayerStats[]
+  tournamentTeams TournamentTeam[]
+  tournamentMatchesAsTeam1 TournamentMatch[] @relation("TournamentTeam1")
+  tournamentMatchesAsTeam2 TournamentMatch[] @relation("TournamentTeam2")
+}
+
+model Tournament {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  numberOfTeams Int
+  status      String    // 'draft' | 'active' | 'completed'
+  startDate   DateTime?
+  endDate     DateTime?
+  createdDate DateTime  @default(now())
+  updatedDate DateTime  @updatedAt
+  tournamentType String // 'round-robin-3' | 'round-robin-2' | 'knockout' | 'ipl-style'
+  oversPerInnings Int
+  matchType   String
+  groupStageRounds Int
+  topTeamsAdvance Int
+  playerOfSeriesId Int?
+  playerOfSeriesName String?
+  teams       TournamentTeam[]
+  matches     TournamentMatch[]
+}
+
+model TournamentTeam {
+  id            Int       @id @default(autoincrement())
+  tournamentId  String
+  tournament    Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  teamId        Int
+  team          Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  points        Int       @default(0)
+  matchesPlayed Int       @default(0)
+  matchesWon    Int       @default(0)
+  matchesLost   Int       @default(0)
+  matchesTied   Int       @default(0)
+  netRunRate    Float     @default(0)
+  runsScored    Int       @default(0)
+  runsConceded  Int       @default(0)
+  oversFaced    Int       @default(0)
+  oversBowled   Int       @default(0)
+  players       TournamentTeamPlayer[]
+
+  @@unique([tournamentId, teamId])
+}
+
+model TournamentTeamPlayer {
+  id                Int             @id @default(autoincrement())
+  tournamentTeamId  Int
+  tournamentTeam    TournamentTeam  @relation(fields: [tournamentTeamId], references: [id], onDelete: Cascade)
+  playerId          Int
+  player            Player          @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([tournamentTeamId, playerId])
+}
+
+model TournamentMatch {
+  id            String    @id @default(cuid())
+  tournamentId  String
+  tournament    Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  team1Id       Int?
+  team1         Team?     @relation("TournamentTeam1", fields: [team1Id], references: [id])
+  team2Id       Int?
+  team2         Team?     @relation("TournamentTeam2", fields: [team2Id], references: [id])
+  matchNumber   Int
+  round         String    // 'group' | 'final' | 'qualifier1' | 'eliminator' | 'qualifier2'
+  status        String    // 'pending' | 'inprogress' | 'finished'
+  venue         String?
+  result        String?
+  winnerTeamId  Int?
+  loserTeamId   Int?
+  scheduledDate DateTime?
+  completedDate DateTime?
+  matchData     Json?     // Full match data as JSON for statistics
 }
 
 model Match {
