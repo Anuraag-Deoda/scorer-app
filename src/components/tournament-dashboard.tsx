@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Trophy, Users, Calendar, Target, TrendingUp, Award, Play, CheckCircle, Clock, XCircle, BarChart } from 'lucide-react';
+import { Trophy, Users, Calendar, Target, TrendingUp, Award, Play, CheckCircle, Clock, XCircle, BarChart, Zap } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { createMatch } from '@/lib/cricket-logic';
 import { DEFAULT_PLAYERS } from '@/data/default-players';
@@ -17,6 +17,7 @@ import type { Tournament, TournamentTeam, TournamentMatch, PlayerStats, Match, M
 import NewMatchForm from './new-match-form';
 import ScoringInterface from './scoring-interface';
 import MatchScorecardDialog from './match-scorecard-dialog';
+import PlayerDataDisplay from './player-data-display';
 import { updatePlayerHistoriesFromMatch } from '@/lib/player-stats-store';
 import { Progress } from '@/components/ui/progress';
 
@@ -24,6 +25,48 @@ interface TournamentDashboardProps {
   tournament: Tournament;
   onTournamentUpdate: (tournament: Tournament) => void;
   onBackToTournaments: () => void;
+}
+
+function computeIndividualPerformances(tournament: Tournament) {
+  let bestBatting: { playerName: string, runs: number, teamName: string } | null = null;
+  let bestBowling: { playerName: string, wickets: number, runs: number, teamName: string } | null = null;
+
+  tournament.matches.forEach(match => {
+    if (match.status === 'finished' && match.matchData) {
+      match.matchData.innings.forEach((innings, index) => {
+        // Check batting performances
+        innings.battingTeam.players.forEach(player => {
+          if (player.batting.runs > 0) {
+            if (!bestBatting || player.batting.runs > bestBatting.runs) {
+              bestBatting = {
+                playerName: player.name,
+                runs: player.batting.runs,
+                teamName: innings.battingTeam.name,
+              };
+            }
+          }
+        });
+
+        // Check bowling performances
+        innings.bowlingTeam.players.forEach(player => {
+          if (player.bowling.wickets > 0) {
+            if (!bestBowling || 
+                player.bowling.wickets > bestBowling.wickets || 
+                (player.bowling.wickets === bestBowling.wickets && player.bowling.runsConceded < bestBowling.runs)) {
+              bestBowling = {
+                playerName: player.name,
+                wickets: player.bowling.wickets,
+                runs: player.bowling.runsConceded,
+                teamName: innings.bowlingTeam.name,
+              };
+            }
+          }
+        });
+      });
+    }
+  });
+
+  return { bestBatting, bestBowling };
 }
 
 function computeTournamentAwards(tournament: Tournament, playerStats: PlayerStats[]) {
@@ -132,6 +175,7 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
   const [tossWinner, setTossWinner] = useState<string>('');
   const [tossDecision, setTossDecision] = useState<'bat' | 'bowl'>('bat');
   const [currentTournamentMatchId, setCurrentTournamentMatchId] = useState<string | null>(null);
+  const [showPlayerData, setShowPlayerData] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -201,80 +245,177 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
     const stats: PlayerStats[] = [];
     const playerMap = new Map<number, PlayerStats>();
 
-    // Initialize stats for all players in the tournament
-    tournament.teams.forEach(team => {
-      team.players.forEach(playerId => {
-        const player = DEFAULT_PLAYERS.find(p => p.id === playerId);
-        if (player) {
-          const playerStat: PlayerStats = {
-            playerId: player.id,
-            playerName: player.name,
-            teamId: team.id,
-            teamName: team.name,
-            matches: 0,
-            runs: 0,
-            ballsFaced: 0,
-            fours: 0,
-            sixes: 0,
-            wickets: 0,
-            ballsBowled: 0,
-            runsConceded: 0,
-            maidens: 0,
-            average: 0,
-            strikeRate: 0,
-            economyRate: 0,
-          };
-          playerMap.set(player.id, playerStat);
-        }
+    console.log('=== PLAYER STATS DEBUGGING ===');
+    console.log('Tournament:', tournament.name);
+    console.log('Tournament teams:', tournament.teams.map(t => ({ id: t.id, name: t.name })));
+    console.log('Total matches:', tournament.matches.length);
+    console.log('Completed matches:', tournament.matches.filter(m => m.status === 'finished').length);
+    
+    // Log the first completed match structure to understand data format
+    const firstCompletedMatch = tournament.matches.find(m => m.status === 'finished');
+    if (firstCompletedMatch) {
+      console.log('First completed match structure:', {
+        id: firstCompletedMatch.id,
+        hasMatchData: !!firstCompletedMatch.matchData,
+        matchDataKeys: firstCompletedMatch.matchData ? Object.keys(firstCompletedMatch.matchData) : [],
+        inningsCount: firstCompletedMatch.matchData?.innings?.length || 0
       });
-    });
+      
+      if (firstCompletedMatch.matchData?.innings) {
+        firstCompletedMatch.matchData.innings.forEach((innings, index) => {
+          console.log(`Innings ${index + 1} structure:`, {
+            battingTeam: {
+              id: innings.battingTeam.id,
+              name: innings.battingTeam.name,
+              playersCount: innings.battingTeam.players.length,
+              firstPlayer: innings.battingTeam.players[0] ? {
+                id: innings.battingTeam.players[0].id,
+                name: innings.battingTeam.players[0].name,
+                batting: innings.battingTeam.players[0].batting,
+                bowling: innings.battingTeam.players[0].bowling
+              } : null
+            },
+            bowlingTeam: {
+              id: innings.bowlingTeam.id,
+              name: innings.bowlingTeam.name,
+              playersCount: innings.bowlingTeam.players.length
+            }
+          });
+        });
+      }
+    }
 
     // Calculate stats from completed matches
     tournament.matches.forEach(match => {
       if (match.status === 'finished' && match.matchData) {
-        // Process batting stats
-        match.matchData.innings.forEach(innings => {
-          innings.timeline.forEach(ball => {
-            if (ball.event === 'run') {
-              const playerStat = playerMap.get(ball.batsmanId);
-              if (playerStat) {
-                playerStat.runs += ball.runs;
-                playerStat.ballsFaced += 1;
-                if (ball.runs === 4) playerStat.fours += 1;
-                if (ball.runs === 6) playerStat.sixes += 1;
-              }
+        console.log(`\nProcessing match ${match.id}:`);
+        
+        // Process batting and bowling stats from innings
+        match.matchData.innings.forEach((innings, index) => {
+          console.log(`  Processing innings ${index + 1}:`);
+          
+          // Get batting team players
+          const battingTeam = innings.battingTeam;
+          console.log(`    Batting team: ${battingTeam.name} (${battingTeam.players.length} players)`);
+          
+          // Find the tournament team by name instead of ID
+          const tournamentTeam = tournament.teams.find(t => t.name === battingTeam.name);
+          if (!tournamentTeam) {
+            console.log(`    WARNING: Could not find tournament team with name "${battingTeam.name}"`);
+            return;
+          }
+          
+          battingTeam.players.forEach(player => {
+            console.log(`      Player ${player.name} (ID: ${player.id}):`, {
+              batting: player.batting,
+              teamId: tournamentTeam.id, // Use tournament team ID
+              teamName: tournamentTeam.name
+            });
+            
+            let playerStat = playerMap.get(player.id);
+            if (!playerStat) {
+              // Create new player stat if it doesn't exist
+              playerStat = {
+                playerId: player.id,
+                playerName: player.name,
+                teamId: tournamentTeam.id, // Use tournament team ID
+                teamName: tournamentTeam.name,
+                matches: 0,
+                runs: 0,
+                ballsFaced: 0,
+                fours: 0,
+                sixes: 0,
+                wickets: 0,
+                ballsBowled: 0,
+                runsConceded: 0,
+                maidens: 0,
+                average: 0,
+                strikeRate: 0,
+                economyRate: 0,
+              };
+              playerMap.set(player.id, playerStat);
+              console.log(`        Created new player stat for ${player.name} in team ${tournamentTeam.name}`);
             }
+            
+            // Add batting stats
+            playerStat.runs += player.batting.runs;
+            playerStat.ballsFaced += player.batting.ballsFaced;
+            playerStat.fours += player.batting.fours;
+            playerStat.sixes += player.batting.sixes;
+            
+            console.log(`        Updated batting stats: runs=${playerStat.runs}, balls=${playerStat.ballsFaced}`);
           });
-        });
 
-        // Process bowling stats
-        match.matchData.innings.forEach(innings => {
-          innings.timeline.forEach(ball => {
-            if (ball.isWicket) {
-              const playerStat = playerMap.get(ball.bowlerId);
-              if (playerStat) {
-                playerStat.wickets += 1;
-              }
+          // Get bowling team players
+          const bowlingTeam = innings.bowlingTeam;
+          console.log(`    Bowling team: ${bowlingTeam.name} (${bowlingTeam.players.length} players)`);
+          
+          // Find the tournament team by name instead of ID
+          const tournamentBowlingTeam = tournament.teams.find(t => t.name === bowlingTeam.name);
+          if (!tournamentBowlingTeam) {
+            console.log(`    WARNING: Could not find tournament team with name "${bowlingTeam.name}"`);
+            return;
+          }
+          
+          bowlingTeam.players.forEach(player => {
+            console.log(`      Player ${player.name} (ID: ${player.id}):`, {
+              bowling: player.bowling,
+              teamId: tournamentBowlingTeam.id, // Use tournament team ID
+              teamName: tournamentBowlingTeam.name
+            });
+            
+            let playerStat = playerMap.get(player.id);
+            if (!playerStat) {
+              // Create new player stat if it doesn't exist
+              playerStat = {
+                playerId: player.id,
+                playerName: player.name,
+                teamId: tournamentBowlingTeam.id, // Use tournament team ID
+                teamName: tournamentBowlingTeam.name,
+                matches: 0,
+                runs: 0,
+                ballsFaced: 0,
+                fours: 0,
+                sixes: 0,
+                wickets: 0,
+                ballsBowled: 0,
+                runsConceded: 0,
+                maidens: 0,
+                average: 0,
+                strikeRate: 0,
+                economyRate: 0,
+              };
+              playerMap.set(player.id, playerStat);
+              console.log(`        Created new player stat for ${player.name} in team ${tournamentBowlingTeam.name}`);
             }
-            if (ball.event !== 'wd' && ball.event !== 'nb') {
-              const playerStat = playerMap.get(ball.bowlerId);
-              if (playerStat) {
-                playerStat.ballsBowled += 1;
-                playerStat.runsConceded += ball.runs + ball.extras;
-              }
-            }
+            
+            // Add bowling stats
+            playerStat.wickets += player.bowling.wickets;
+            playerStat.ballsBowled += player.bowling.ballsBowled;
+            playerStat.runsConceded += player.bowling.runsConceded;
+            playerStat.maidens += player.bowling.maidens;
+            
+            console.log(`        Updated bowling stats: wickets=${playerStat.wickets}, balls=${playerStat.ballsBowled}`);
           });
         });
 
         // Count matches for each player
-        match.matchData.teams.forEach(team => {
-          team.players.forEach(player => {
-            const playerStat = playerMap.get(player.id);
-            if (playerStat) {
-              playerStat.matches += 1;
+        if (match.matchData.teams) {
+          console.log(`    Counting matches for ${match.matchData.teams.length} teams`);
+          match.matchData.teams.forEach(team => {
+            // Find tournament team by name
+            const tournamentTeam = tournament.teams.find(t => t.name === team.name);
+            if (tournamentTeam) {
+              team.players.forEach(player => {
+                const playerStat = playerMap.get(player.id);
+                if (playerStat) {
+                  playerStat.matches += 1;
+                  console.log(`      Player ${player.name} now has ${playerStat.matches} matches`);
+                }
+              });
             }
           });
-        });
+        }
       }
     });
 
@@ -291,7 +432,20 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
       }
     });
 
-    setPlayerStats(Array.from(playerMap.values()));
+    const finalStats = Array.from(playerMap.values());
+    console.log('\n=== FINAL RESULTS ===');
+    console.log('Total player stats calculated:', finalStats.length);
+    console.log('Stats by team:', tournament.teams.map(team => {
+      const teamPlayers = finalStats.filter(p => p.teamId === team.id);
+      return {
+        teamName: team.name,
+        teamId: team.id,
+        players: teamPlayers.length,
+        playerNames: teamPlayers.map(p => p.playerName)
+      };
+    }));
+    
+    setPlayerStats(finalStats);
   };
 
   const startMatch = (match: TournamentMatch) => {
@@ -962,6 +1116,7 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
   };
 
   const awards = computeTournamentAwards(tournament, playerStats);
+  const { bestBatting, bestBowling } = computeIndividualPerformances(tournament);
   const leaderboards = computeLeaderboards(playerStats);
   const finishedMatches = [...tournament.matches].filter(m => m.status === 'finished' && m.matchData);
   const lastFinished = finishedMatches.length ? finishedMatches.sort((a,b)=> (b.completedDate? new Date(b.completedDate).getTime():0) - (a.completedDate? new Date(a.completedDate).getTime():0))[0] : null;
@@ -1276,6 +1431,7 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
           <Button variant="outline" onClick={onBackToTournaments}>
             ← Back to Tournaments
           </Button>
+          <Button onClick={() => setShowPlayerData(true)}>View Player Data</Button>
         </div>
       </div>
 
@@ -1558,144 +1714,200 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
         </TabsContent>
 
         <TabsContent value="awards" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <BarChart className="w-5 h-5 text-blue-500" />
-                  Top 5 Run Scorers
+                  <Trophy className="w-5 h-5 text-orange-500" />
+                  Best Batting Performance
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <ChartContainer config={{
-                  runs: { label: "Runs", color: "hsl(var(--chart-1))" },
-                }} className="h-[250px] w-full">
-                  <ReBarChart data={leaderboards.byRuns} layout="vertical" margin={{ left: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" />
-                    <YAxis dataKey="playerName" type="category" width={80} />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <Bar dataKey="runs" fill="var(--color-runs)" radius={4} />
-                  </ReBarChart>
-                </ChartContainer>
+                {bestBatting ? (
+                  <div className="flex items-center justify-between text-sm">
+                    <div>
+                      <p className="font-semibold">{bestBatting.playerName}</p>
+                      <p className="text-muted-foreground">{bestBatting.teamName}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold text-lg text-orange-600">{bestBatting.runs} runs</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-4">
+                    <Trophy className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">No batting data yet</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <BarChart className="w-5 h-5 text-green-500" />
-                  Top 5 Wicket Takers
+                  <Target className="w-5 h-5 text-purple-500" />
+                  Best Bowling Performance
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <ChartContainer config={{
-                  wickets: { label: "Wickets", color: "hsl(var(--chart-2))" },
-                }} className="h-[250px] w-full">
-                  <ReBarChart data={leaderboards.byWkts} layout="vertical" margin={{ left: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" />
-                    <YAxis dataKey="playerName" type="category" width={80} />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <Bar dataKey="wickets" fill="var(--color-wickets)" radius={4} />
-                  </ReBarChart>
-                </ChartContainer>
+                {bestBowling ? (
+                  <div className="flex items-center justify-between text-sm">
+                    <div>
+                      <p className="font-semibold">{bestBowling.playerName}</p>
+                      <p className="text-muted-foreground">{bestBowling.teamName}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold text-lg text-purple-600">{bestBowling.wickets}/{bestBowling.runs}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-4">
+                    <Target className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">No bowling data yet</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
+          
           <Card>
-            <CardHeader><CardTitle>Advanced Awards</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Award className="w-5 h-5 text-blue-500" />
+                Advanced Awards
+              </CardTitle>
+            </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {(() => {
-                const widths = normalize(leaderboards.bySR.map(p => p.strikeRate));
-                return (
-                  <div>
-                    <h4 className="font-semibold mb-2">Best Strike Rate</h4>
+              <div className="space-y-3">
+                <h4 className="font-semibold text-sm text-blue-600 flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4" />
+                  Best Strike Rate
+                </h4>
+                {leaderboards.bySR.length > 0 ? (
+                  <div className="space-y-2">
                     {leaderboards.bySR.map((p, i) => (
-                      <div key={p.playerId} className="space-y-1 mb-1">
-                        <div className="flex items-center justify-between text-sm"><span>{i+1}. {p.playerName}</span><span>{p.strikeRate.toFixed(1)}</span></div>
-                        <Progress value={widths[i]} className="h-1.5" />
+                      <div key={p.playerId} className="flex items-center justify-between p-2 bg-blue-50 rounded-md">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-blue-600 bg-blue-100 px-2 py-1 rounded-full">{i+1}</span>
+                          <span className="text-sm font-medium">{p.playerName}</span>
+                        </div>
+                        <span className="text-sm font-semibold text-blue-600">{p.strikeRate.toFixed(1)}</span>
                       </div>
                     ))}
                   </div>
-                );
-              })()}
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-4">No data yet</p>
+                )}
+              </div>
 
-              {(() => {
-                const widths = normalize(leaderboards.byEcon.map(p => 1/Math.max(0.01,p.economyRate))); // lower better
-                return (
-                  <div>
-                    <h4 className="font-semibold mb-2">Best Economy</h4>
+              <div className="space-y-3">
+                <h4 className="font-semibold text-sm text-green-600 flex items-center gap-2">
+                  <Zap className="w-4 h-4" />
+                  Best Economy
+                </h4>
+                {leaderboards.byEcon.length > 0 ? (
+                  <div className="space-y-2">
                     {leaderboards.byEcon.map((p, i) => (
-                      <div key={p.playerId} className="space-y-1 mb-1">
-                        <div className="flex items-center justify-between text-sm"><span>{i+1}. {p.playerName}</span><span>{p.economyRate.toFixed(2)}</span></div>
-                        <Progress value={widths[i]} className="h-1.5" />
+                      <div key={p.playerId} className="flex items-center justify-between p-2 bg-green-50 rounded-md">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-green-600 bg-green-100 px-2 py-1 rounded-full">{i+1}</span>
+                          <span className="text-sm font-medium">{p.playerName}</span>
+                        </div>
+                        <span className="text-sm font-semibold text-green-600">{p.economyRate.toFixed(2)}</span>
                       </div>
                     ))}
                   </div>
-                );
-              })()}
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-4">No data yet</p>
+                )}
+              </div>
 
-              {(() => {
-                const widths = normalize(leaderboards.byAvgBat.map(p => p.runs/p.matches));
-                return (
-                  <div>
-                    <h4 className="font-semibold mb-2">Best Avg Batsman</h4>
+              <div className="space-y-3">
+                <h4 className="font-semibold text-sm text-orange-600 flex items-center gap-2">
+                  <Trophy className="w-4 h-4" />
+                  Best Avg Batsman
+                </h4>
+                {leaderboards.byAvgBat.length > 0 ? (
+                  <div className="space-y-2">
                     {leaderboards.byAvgBat.map((p, i) => (
-                      <div key={p.playerId} className="space-y-1 mb-1">
-                        <div className="flex items-center justify-between text-sm"><span>{i+1}. {p.playerName}</span><span>{(p.runs/p.matches).toFixed(1)}</span></div>
-                        <Progress value={widths[i]} className="h-1.5" />
+                      <div key={p.playerId} className="flex items-center justify-between p-2 bg-orange-50 rounded-md">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-orange-600 bg-orange-100 px-2 py-1 rounded-full">{i+1}</span>
+                          <span className="text-sm font-medium">{p.playerName}</span>
+                        </div>
+                        <span className="text-sm font-semibold text-orange-600">{(p.runs/p.matches).toFixed(1)}</span>
                       </div>
                     ))}
                   </div>
-                );
-              })()}
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-4">No data yet</p>
+                )}
+              </div>
 
-              {(() => {
-                const widths = normalize(leaderboards.byAvgBowl.map(p => p.wickets/p.matches));
-                return (
-                  <div>
-                    <h4 className="font-semibold mb-2">Best Avg Bowler</h4>
+              <div className="space-y-3">
+                <h4 className="font-semibold text-sm text-purple-600 flex items-center gap-2">
+                  <Target className="w-4 h-4" />
+                  Best Avg Bowler
+                </h4>
+                {leaderboards.byAvgBowl.length > 0 ? (
+                  <div className="space-y-2">
                     {leaderboards.byAvgBowl.map((p, i) => (
-                      <div key={p.playerId} className="space-y-1 mb-1">
-                        <div className="flex items-center justify-between text-sm"><span>{i+1}. {p.playerName}</span><span>{(p.wickets/p.matches).toFixed(2)}</span></div>
-                        <Progress value={widths[i]} className="h-1.5" />
+                      <div key={p.playerId} className="flex items-center justify-between p-2 bg-purple-50 rounded-md">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-purple-600 bg-purple-100 px-2 py-1 rounded-full">{i+1}</span>
+                          <span className="text-sm font-medium">{p.playerName}</span>
+                        </div>
+                        <span className="text-sm font-semibold text-purple-600">{(p.wickets/p.matches).toFixed(2)}</span>
                       </div>
                     ))}
                   </div>
-                );
-              })()}
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-4">No data yet</p>
+                )}
+              </div>
 
-              {(() => {
-                const widths = normalize(leaderboards.explosive.map(p => (p.fours*4 + p.sixes*6)/Math.max(1,p.ballsFaced)));
-                return (
-                  <div>
-                    <h4 className="font-semibold mb-2">Most Explosive</h4>
+              <div className="space-y-3">
+                <h4 className="font-semibold text-sm text-red-600 flex items-center gap-2">
+                  <Zap className="w-4 h-4" />
+                  Most Explosive
+                </h4>
+                {leaderboards.explosive.length > 0 ? (
+                  <div className="space-y-2">
                     {leaderboards.explosive.map((p, i) => (
-                      <div key={p.playerId} className="space-y-1 mb-1">
-                        <div className="flex items-center justify-between text-sm"><span>{i+1}. {p.playerName}</span><span>{(((p.fours*4 + p.sixes*6)/Math.max(1,p.ballsFaced))*100).toFixed(1)} EI</span></div>
-                        <Progress value={widths[i]} className="h-1.5" />
+                      <div key={p.playerId} className="flex items-center justify-between p-2 bg-red-50 rounded-md">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-red-600 bg-red-100 px-2 py-1 rounded-full">{i+1}</span>
+                          <span className="text-sm font-medium">{p.playerName}</span>
+                        </div>
+                        <span className="text-sm font-semibold text-red-600">{((p.fours*4 + p.sixes*6)/Math.max(1,p.ballsFaced)*100).toFixed(1)}%</span>
                       </div>
                     ))}
                   </div>
-                );
-              })()}
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-4">No data yet</p>
+                )}
+              </div>
 
-              {(() => {
-                const mvpList = [...playerStats].map(p => ({...p, impact: p.runs + p.wickets*20 + p.fours + p.sixes*2 - (p.runsConceded/5)})).sort((a,b)=> b.impact - a.impact).slice(0,5);
-                const widths = normalize(mvpList.map(p => p.impact));
-                return (
-                  <div>
-                    <h4 className="font-semibold mb-2">MVP (Impact)</h4>
-                    {mvpList.map((p, i) => (
-                      <div key={p.playerId} className="space-y-1 mb-1">
-                        <div className="flex items-center justify-between text-sm"><span>{i+1}. {p.playerName}</span><span>{p.impact.toFixed(0)}</span></div>
-                        <Progress value={widths[i]} className="h-1.5" />
+              <div className="space-y-3">
+                <h4 className="font-semibold text-sm text-indigo-600 flex items-center gap-2">
+                  <Users className="w-4 h-4" />
+                  Most Consistent
+                </h4>
+                {leaderboards.byRuns.length > 0 ? (
+                  <div className="space-y-2">
+                    {leaderboards.byRuns.slice(0, 3).map((p, i) => (
+                      <div key={p.playerId} className="flex items-center justify-between p-2 bg-indigo-50 rounded-md">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-indigo-600 bg-indigo-100 px-2 py-1 rounded-full">{i+1}</span>
+                          <span className="text-sm font-medium">{p.playerName}</span>
+                        </div>
+                        <span className="text-sm font-semibold text-indigo-600">{p.runs}</span>
                       </div>
                     ))}
                   </div>
-                );
-              })()}
-
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-4">No data yet</p>
+                )}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -2037,62 +2249,130 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
         <TabsContent value="statistics">
           <Card>
             <CardHeader>
-              <CardTitle>Player Statistics by Team</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>Player Statistics by Team</CardTitle>
+                <Button 
+                  onClick={() => {
+                    console.log('Manual refresh of tournament player stats');
+                    calculatePlayerStats();
+                  }}
+                  variant="outline"
+                  size="sm"
+                >
+                  Refresh Stats
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
-              <Accordion type="single" collapsible className="w-full">
-                {tournament.teams.map(team => (
-                  <AccordionItem value={`team-${team.id}`} key={team.id}>
-                    <AccordionTrigger>
-                      <div className="flex items-center gap-3">
-                        {team.logo ? (
-                          <img src={team.logo} alt={`${team.name} logo`} className="w-8 h-8 rounded" />
-                        ) : (
-                          <div className="w-8 h-8 bg-muted rounded-full flex items-center justify-center text-sm font-bold">
-                            {team.name.charAt(0).toUpperCase()}
+              {playerStats.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground mb-2">No player statistics available</p>
+                  <p className="text-sm text-muted-foreground">
+                    Player statistics will appear here once matches are completed and data is processed.
+                  </p>
+                  <Button 
+                    onClick={calculatePlayerStats} 
+                    variant="outline" 
+                    className="mt-4"
+                  >
+                    Calculate Stats
+                  </Button>
+                </div>
+              ) : (
+                <Accordion type="single" collapsible className="w-full">
+                  {tournament.teams.map(team => {
+                    const teamPlayers = playerStats.filter(p => p.teamId === team.id && p.matches > 0);
+                    return (
+                      <AccordionItem value={`team-${team.id}`} key={team.id}>
+                        <AccordionTrigger>
+                          <div className="flex items-center gap-3">
+                            {team.logo ? (
+                              <img src={team.logo} alt={`${team.name} logo`} className="w-8 h-8 rounded" />
+                            ) : (
+                              <div className="w-8 h-8 bg-muted rounded-full flex items-center justify-center text-sm font-bold">
+                                {team.name.charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                            <span className="font-semibold">{team.name}</span>
+                            <Badge variant="secondary" className="ml-auto">
+                              {teamPlayers.length} players
+                            </Badge>
                           </div>
-                        )}
-                        <span className="font-semibold">{team.name}</span>
-                      </div>
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Player</TableHead>
-                            <TableHead>Matches</TableHead>
-                            <TableHead>Runs</TableHead>
-                            <TableHead>Wickets</TableHead>
-                            <TableHead>Avg</TableHead>
-                            <TableHead>SR</TableHead>
-                            <TableHead>Econ</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {playerStats
-                            .filter(p => p.teamId === team.id && p.matches > 0)
-                            .sort((a, b) => b.runs - a.runs)
-                            .map(player => (
-                              <TableRow key={player.playerId}>
-                                <TableCell className="font-medium">{player.playerName}</TableCell>
-                                <TableCell>{player.matches}</TableCell>
-                                <TableCell>{player.runs}</TableCell>
-                                <TableCell>{player.wickets}</TableCell>
-                                <TableCell>{player.average.toFixed(1)}</TableCell>
-                                <TableCell>{player.strikeRate.toFixed(1)}</TableCell>
-                                <TableCell>{player.economyRate.toFixed(2)}</TableCell>
-                              </TableRow>
-                            ))}
-                        </TableBody>
-                      </Table>
-                    </AccordionContent>
-                  </AccordionItem>
-                ))}
-              </Accordion>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          {teamPlayers.length === 0 ? (
+                            <p className="text-center py-4 text-muted-foreground">
+                              No players from this team have played matches yet.
+                            </p>
+                          ) : (
+                            <div className="space-y-4">
+                              <div>
+                                <h4 className="font-semibold mb-2">Batting Stats</h4>
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>Player</TableHead>
+                                      <TableHead>Matches</TableHead>
+                                      <TableHead>Runs</TableHead>
+                                      <TableHead>Avg</TableHead>
+                                      <TableHead>SR</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {teamPlayers
+                                      .filter(p => p.runs > 0)
+                                      .sort((a, b) => b.runs - a.runs)
+                                      .map(player => (
+                                        <TableRow key={player.playerId}>
+                                          <TableCell className="font-medium">{player.playerName}</TableCell>
+                                          <TableCell>{player.matches}</TableCell>
+                                          <TableCell>{player.runs}</TableCell>
+                                          <TableCell>{(player.runs / (player.matches || 1)).toFixed(2)}</TableCell>
+                                          <TableCell>{player.strikeRate.toFixed(2)}</TableCell>
+                                        </TableRow>
+                                      ))}
+                                  </TableBody>
+                                </Table>
+                              </div>
+                              <div>
+                                <h4 className="font-semibold mb-2">Bowling Stats</h4>
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>Player</TableHead>
+                                      <TableHead>Matches</TableHead>
+                                      <TableHead>Wickets</TableHead>
+                                      <TableHead>Avg</TableHead>
+                                      <TableHead>Econ</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {teamPlayers
+                                      .filter(p => p.wickets > 0)
+                                      .sort((a, b) => b.wickets - a.wickets)
+                                      .map(player => (
+                                        <TableRow key={player.playerId}>
+                                          <TableCell className="font-medium">{player.playerName}</TableCell>
+                                          <TableCell>{player.matches}</TableCell>
+                                          <TableCell>{player.wickets}</TableCell>
+                                          <TableCell>{player.average.toFixed(2)}</TableCell>
+                                          <TableCell>{player.economyRate.toFixed(2)}</TableCell>
+                                        </TableRow>
+                                      ))}
+                                  </TableBody>
+                                </Table>
+                              </div>
+                            </div>
+                          )}
+                        </AccordionContent>
+                      </AccordionItem>
+                    );
+                  })}
+                </Accordion>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
-
         <TabsContent value="history">
           <Card>
             <CardHeader>
@@ -2171,6 +2451,9 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
           </Card>
         </TabsContent>
       </Tabs>
+      {showPlayerData && (
+        <PlayerDataDisplay players={playerStats} onClose={() => setShowPlayerData(false)} />
+      )}
     </div>
   );
 }

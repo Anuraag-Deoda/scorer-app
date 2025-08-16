@@ -27,6 +27,120 @@ export default function TournamentsList({
 }: TournamentsListProps) {
   const [showPlayerData, setShowPlayerData] = useState(false);
   const [tournamentToDelete, setTournamentToDelete] = useState<string | null>(null);
+  const [globalPlayerStats, setGlobalPlayerStats] = useState<any[]>([]);
+
+  // Calculate global player stats from all tournaments
+  const calculateGlobalPlayerStats = () => {
+    const playerMap = new Map<number, any>();
+
+    tournaments.forEach(tournament => {
+      tournament.matches.forEach(match => {
+        if (match.status === 'finished' && match.matchData) {
+          // Process batting and bowling stats from innings
+          match.matchData.innings.forEach(innings => {
+            // Get batting team players
+            const battingTeam = innings.battingTeam;
+            battingTeam.players.forEach(player => {
+              let playerStat = playerMap.get(player.id);
+              if (!playerStat) {
+                playerStat = {
+                  playerId: player.id,
+                  playerName: player.name,
+                  teamId: battingTeam.id,
+                  teamName: battingTeam.name,
+                  matches: 0,
+                  runs: 0,
+                  ballsFaced: 0,
+                  fours: 0,
+                  sixes: 0,
+                  wickets: 0,
+                  ballsBowled: 0,
+                  runsConceded: 0,
+                  maidens: 0,
+                  average: 0,
+                  strikeRate: 0,
+                  economyRate: 0,
+                };
+                playerMap.set(player.id, playerStat);
+              }
+              
+              // Add batting stats
+              playerStat.runs += player.batting.runs;
+              playerStat.ballsFaced += player.batting.ballsFaced;
+              playerStat.fours += player.batting.fours;
+              playerStat.sixes += player.batting.sixes;
+            });
+
+            // Get bowling team players
+            const bowlingTeam = innings.bowlingTeam;
+            bowlingTeam.players.forEach(player => {
+              let playerStat = playerMap.get(player.id);
+              if (!playerStat) {
+                playerStat = {
+                  playerId: player.id,
+                  playerName: player.name,
+                  teamId: bowlingTeam.id,
+                  teamName: bowlingTeam.name,
+                  matches: 0,
+                  runs: 0,
+                  ballsFaced: 0,
+                  fours: 0,
+                  sixes: 0,
+                  wickets: 0,
+                  ballsBowled: 0,
+                  runsConceded: 0,
+                  maidens: 0,
+                  average: 0,
+                  strikeRate: 0,
+                  economyRate: 0,
+                };
+                playerMap.set(player.id, playerStat);
+              }
+              
+              // Add bowling stats
+              playerStat.wickets += player.bowling.wickets;
+              playerStat.ballsBowled += player.bowling.ballsBowled;
+              playerStat.runsConceded += player.bowling.runsConceded;
+              playerStat.maidens += player.bowling.maidens;
+            });
+          });
+
+          // Count matches for each player
+          match.matchData.teams.forEach(team => {
+            team.players.forEach(player => {
+              const playerStat = playerMap.get(player.id);
+              if (playerStat) {
+                playerStat.matches += 1;
+              }
+            });
+          });
+        }
+      });
+    });
+
+    // Calculate averages and rates
+    playerMap.forEach(stat => {
+      if (stat.wickets > 0) {
+        stat.average = stat.runsConceded / stat.wickets;
+      }
+      if (stat.ballsFaced > 0) {
+        stat.strikeRate = (stat.runs / stat.ballsFaced) * 100;
+      }
+      if (stat.ballsBowled > 0) {
+        stat.economyRate = (stat.runsConceded / stat.ballsBowled) * 6;
+      }
+    });
+
+    const stats = Array.from(playerMap.values());
+    setGlobalPlayerStats(stats);
+    console.log('Global player stats calculated:', stats);
+    return stats;
+  };
+
+  const handleViewPlayerData = () => {
+    const stats = calculateGlobalPlayerStats();
+    setShowPlayerData(true);
+  };
 
   const handleDeleteTournament = (tournamentId: string) => {
     if (window.confirm('Are you sure you want to delete this tournament? This will also delete all associated match data and player statistics.')) {
@@ -57,7 +171,10 @@ export default function TournamentsList({
   return (
     <div className="space-y-6">
       {showPlayerData && (
-        <PlayerDataDisplay onClose={() => setShowPlayerData(false)} />
+        <PlayerDataDisplay 
+          players={globalPlayerStats} 
+          onClose={() => setShowPlayerData(false)} 
+        />
       )}
       
       <div className="flex items-center justify-between">
@@ -68,7 +185,7 @@ export default function TournamentsList({
         <div className="flex gap-2">
           <Button 
             variant="outline" 
-            onClick={() => setShowPlayerData(true)}
+            onClick={handleViewPlayerData}
             className="flex items-center gap-2"
           >
             <Eye className="w-4 h-4" />

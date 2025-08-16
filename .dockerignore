@@ -1,0 +1,22 @@
+# Dependencies
+node_modules
+
+# Next.js build output
+.next
+
+# Local development
+.env
+.env.local
+
+# Git
+.git
+
+# Prisma
+prisma/dev.db
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Misc
+*.md
