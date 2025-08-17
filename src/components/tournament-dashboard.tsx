@@ -69,11 +69,15 @@ function computeIndividualPerformances(tournament: Tournament) {
   return { bestBatting, bestBowling };
 }
 
-function computeTournamentAwards(tournament: Tournament, playerStats: PlayerStats[]) {
-  const awards: any = {
-    explosiveBatsman: null,
-    bestAvgBatsman: null,
-    bestAvgBowler: null,
+function computeTournamentAwards(tournament: Tournament, playerStats: PlayerStats[]): {
+  explosiveBatsman: (PlayerStats & { explosiveness: number }) | null;
+  bestAvgBatsman: (PlayerStats & { batAvg: number }) | null;
+  bestAvgBowler: (PlayerStats & { bowlAvgPerMatch: number }) | null;
+} {
+  const awards = {
+    explosiveBatsman: null as (PlayerStats & { explosiveness: number }) | null,
+    bestAvgBatsman: null as (PlayerStats & { batAvg: number }) | null,
+    bestAvgBowler: null as (PlayerStats & { bowlAvgPerMatch: number }) | null,
   };
 
   const byTeamName = (id: number) => tournament.teams.find(t => t.id === id)?.name || '';
@@ -1227,6 +1231,25 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
   };
 
   if (currentMatch) {
+    // Ensure currentMatch is a valid Match object before rendering ScoringInterface
+    if (!currentMatch.innings || currentMatch.innings.length === 0) {
+      return (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <Button variant="outline" onClick={handleBackToTournament}>
+              ← Back to Tournament
+            </Button>
+            <h2 className="text-xl font-semibold">Loading Match...</h2>
+          </div>
+          <Card>
+            <CardContent className="p-6 text-center">
+              <p className="text-muted-foreground">Match data is being prepared. Please wait.</p>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">

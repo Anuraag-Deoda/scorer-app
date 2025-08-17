@@ -632,7 +632,7 @@ function ScoreboardContent({ match, setMatch, onBowlerChange, isSimulating }: { 
                     <WormGraph />
                 </TabsContent>
                 <TabsContent value="partnerships" className="p-2 sm:p-3">
-                    <PartnershipAnalysis innings={currentInnings} />
+                    <PartnershipAnalysis match={match} />
                 </TabsContent>
                 <TabsContent value="manhattan" className="p-2 sm:p-3">
                     <ManhattanChart innings={currentInnings} />

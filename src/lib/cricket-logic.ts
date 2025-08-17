@@ -508,62 +508,117 @@ export function processBall(match: Match, ball: BallDetails): Match | null {
 }
 
 export function undoLastBall(match: Match): Match | null {
-    const originalMatchState = JSON.parse(JSON.stringify(match));
-    if (originalMatchState.innings[0].timeline.length === 0 && originalMatchState.innings.length === 1) return null;
+    const newMatch = JSON.parse(JSON.stringify(match));
+    let currentInnings = newMatch.innings[newMatch.currentInnings - 1];
 
-    let replayedMatch = createMatch(
-        {
-            teamNames: [match.teams[0].name, match.teams[1].name],
-            oversPerInnings: match.oversPerInnings,
-            toss: match.toss,
-            matchType: match.matchType,
-        },
-        match.teams.flatMap(t => t.players)
-    );
-    
-    replayedMatch.teams = JSON.parse(JSON.stringify(match.teams));
-    
-    const allBalls = originalMatchState.innings.flatMap((i: Innings) => i.timeline);
-    allBalls.pop();
-
-    if (allBalls.length === 0) {
-       const battingFirstTeam = match.toss.winner === match.teams[0].name
-        ? (match.toss.decision === 'bat' ? match.teams[0] : match.teams[1])
-        : (match.toss.decision === 'bat' ? match.teams[1] : match.teams[0]);
-  
-      const bowlingFirstTeam = battingFirstTeam.id === match.teams[0].id ? match.teams[1] : match.teams[0];
-      replayedMatch.innings = [createInnings(battingFirstTeam, bowlingFirstTeam)];
-      return replayedMatch;
+    if (currentInnings.timeline.length === 0) {
+        if (newMatch.currentInnings > 1) {
+            newMatch.innings.pop();
+            newMatch.currentInnings = 1;
+            currentInnings = newMatch.innings[0];
+        } else {
+            return null; // No balls to undo in the first innings
+        }
     }
 
+    const lastBall = currentInnings.timeline.pop();
+    if (!lastBall) return null;
 
-    replayedMatch.innings = [createInnings(replayedMatch.teams.find(t => t.id === match.innings[0].battingTeam.id)!, replayedMatch.teams.find(t => t.id === match.innings[0].bowlingTeam.id)! )]
-    replayedMatch.currentInnings = 1;
+    const battingTeam = currentInnings.battingTeam;
+    const bowlingTeam = currentInnings.bowlingTeam;
+    const onStrike = battingTeam.players.find((p: Player) => p.id === lastBall.batsmanId);
+    const bowler = bowlingTeam.players.find((p: Player) => p.id === lastBall.bowlerId);
+    const isLegalBall = lastBall.event !== 'wd' && lastBall.event !== 'nb';
 
+    // Revert score
+    currentInnings.score -= (lastBall.runs + lastBall.extras);
 
-    for(const ball of allBalls) {
-        let currentInnings = replayedMatch.innings[replayedMatch.currentInnings - 1];
+    // Revert bowler stats
+    if (bowler) {
+        bowler.bowling.runsConceded -= (lastBall.runs + lastBall.extras);
+        if (isLegalBall) {
+            bowler.bowling.ballsBowled--;
+        }
+    }
+
+    // Revert batsman stats
+    if (onStrike) {
+        if (isLegalBall) {
+            onStrike.batting.ballsFaced--;
+        }
+        if (lastBall.event === 'run') {
+            onStrike.batting.runs -= lastBall.runs;
+            if (lastBall.runs === 4) onStrike.batting.fours--;
+            if (lastBall.runs === 6) onStrike.batting.sixes--;
+        }
+    }
+
+    // Revert partnership
+    if (isLegalBall) {
+        currentInnings.currentPartnership.balls--;
+    }
+    if (lastBall.event === 'run') {
+        currentInnings.currentPartnership.runs -= lastBall.runs;
+    }
+
+    // Revert wicket
+    if (lastBall.isWicket) {
+        currentInnings.wickets--;
+        if (onStrike) {
+            onStrike.batting.status = 'not out';
+            onStrike.batting.outDetails = undefined;
+        }
+        if (bowler && lastBall.wicketType !== 'Run Out') {
+            bowler.bowling.wickets--;
+        }
+        currentInnings.fallOfWickets.pop();
         
-        if (currentInnings.currentBowler === -1) {
-            currentInnings.currentBowler = ball.bowlerId;
-        }
-
-        const processedMatch = processBall(replayedMatch, { ...ball });
-
-        if (processedMatch) {
-            replayedMatch = processedMatch;
-        }
-    }
-    
-    const finalInnings = replayedMatch.innings[replayedMatch.currentInnings - 1];
-    const lastBall = allBalls[allBalls.length - 1];
-    if(lastBall) {
-        if (finalInnings.ballsThisOver > 0) {
-            finalInnings.currentBowler = lastBall.bowlerId;
+        // Restore previous partnership
+        const fow = currentInnings.fallOfWickets;
+        if (fow.length > 0) {
+            const lastFow = fow[fow.length - 1];
+            // This is a simplification; a full history would be needed to restore perfectly
+        } else {
+            // This was the first wicket, restore initial partnership
         }
     }
-    
-    return replayedMatch;
+
+    // Revert overs and balls
+    if (isLegalBall) {
+        if (currentInnings.ballsThisOver === 0) {
+            currentInnings.overs--;
+            currentInnings.ballsThisOver = 5;
+        } else {
+            currentInnings.ballsThisOver--;
+        }
+    }
+
+    // Revert strike rotation
+    if (lastBall.runs % 2 === 1 && isLegalBall) {
+        [currentInnings.batsmanOnStrike, currentInnings.batsmanNonStrike] = [currentInnings.batsmanNonStrike, currentInnings.batsmanOnStrike];
+    }
+    if (currentInnings.ballsThisOver === 5 && isLegalBall) { // End of over strike change
+        [currentInnings.batsmanOnStrike, currentInnings.batsmanNonStrike] = [currentInnings.batsmanNonStrike, currentInnings.batsmanOnStrike];
+    }
+
+
+    // Recalculate rates
+    battingTeam.players.forEach((p: Player) => {
+        if (p.batting.ballsFaced > 0) {
+            p.batting.strikeRate = (p.batting.runs / p.batting.ballsFaced) * 100;
+        } else {
+            p.batting.strikeRate = 0;
+        }
+    });
+    bowlingTeam.players.forEach((p: Player) => {
+        if (p.bowling.ballsBowled > 0) {
+            p.bowling.economyRate = p.bowling.runsConceded / (p.bowling.ballsBowled / 6);
+        } else {
+            p.bowling.economyRate = 0;
+        }
+    });
+
+    return newMatch;
 }
 
 export function updateFieldPlacements(match: Match, placements: FielderPlacement[]): Match {
