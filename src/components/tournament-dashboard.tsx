@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Trophy, Users, Calendar, Target, TrendingUp, Award, Play, CheckCircle, Clock, XCircle, BarChart, Zap } from 'lucide-react';
+import { Trophy, Users, Calendar, Target, TrendingUp, Award, Play, CheckCircle, Clock, XCircle, BarChart, Zap, CloudRain, Cloud, Sun } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { createMatch } from '@/lib/cricket-logic';
 import { DEFAULT_PLAYERS } from '@/data/default-players';
@@ -20,6 +20,7 @@ import MatchScorecardDialog from './match-scorecard-dialog';
 import PlayerDataDisplay from './player-data-display';
 import { updatePlayerHistoriesFromMatch } from '@/lib/player-stats-store';
 import { Progress } from '@/components/ui/progress';
+import { Input } from '@/components/ui/input';
 
 interface TournamentDashboardProps {
   tournament: Tournament;
@@ -28,8 +29,8 @@ interface TournamentDashboardProps {
 }
 
 function computeIndividualPerformances(tournament: Tournament) {
-  let bestBatting: { playerName: string, runs: number, teamName: string } | null = null;
-  let bestBowling: { playerName: string, wickets: number, runs: number, teamName: string } | null = null;
+  let bestBatting: { playerName: string, runs: number, teamName: string, balls: number } | null = null;
+  let bestBowling: { playerName: string, wickets: number, runs: number, teamName: string, overs: number, maidens: number, economy: number } | null = null;
 
   tournament.matches.forEach(match => {
     if (match.status === 'finished' && match.matchData) {
@@ -42,6 +43,7 @@ function computeIndividualPerformances(tournament: Tournament) {
                 playerName: player.name,
                 runs: player.batting.runs,
                 teamName: innings.battingTeam.name,
+                balls: player.batting.ballsFaced,
               };
             }
           }
@@ -58,6 +60,9 @@ function computeIndividualPerformances(tournament: Tournament) {
                 wickets: player.bowling.wickets,
                 runs: player.bowling.runsConceded,
                 teamName: innings.bowlingTeam.name,
+                overs: Math.floor(player.bowling.ballsBowled / 6) + (player.bowling.ballsBowled % 6) / 10,
+                maidens: player.bowling.maidens,
+                economy: player.bowling.economyRate,
               };
             }
           }
@@ -67,6 +72,148 @@ function computeIndividualPerformances(tournament: Tournament) {
   });
 
   return { bestBatting, bestBowling };
+}
+
+function computeBestPartnership(tournament: Tournament) {
+  const allPartnerships: Array<{
+    player1Name: string;
+    player2Name: string;
+    teamName: string;
+    runs: number;
+    matchNumber: number;
+  }> = [];
+
+  tournament.matches.forEach(match => {
+    if (match.status === 'finished' && match.matchData) {
+      match.matchData.innings.forEach((innings, index) => {
+        // Calculate partnerships from fall of wickets
+        let previousScore = 0;
+        let previousOver = 0;
+        
+        if (innings.fallOfWickets.length === 0) {
+          // If no wickets, check current partnership
+          if (innings.currentPartnership.runs > 0) {
+            const batsman1 = innings.battingTeam.players.find(p => p.id === innings.currentPartnership.batsman1);
+            const batsman2 = innings.battingTeam.players.find(p => p.id === innings.currentPartnership.batsman2);
+            
+            if (batsman1 && batsman2) {
+              allPartnerships.push({
+                player1Name: batsman1.name,
+                player2Name: batsman2.name,
+                teamName: innings.battingTeam.name,
+                runs: innings.currentPartnership.runs,
+                matchNumber: match.matchNumber,
+              });
+            }
+          }
+          return;
+        }
+
+        // Calculate partnerships from fall of wickets
+        innings.fallOfWickets.forEach((fow, fowIndex) => {
+          const partnershipRuns = fow.score - previousScore;
+          
+          if (partnershipRuns > 0) {
+            // Find the two batsmen who were batting during this partnership
+            const timelineBeforeWicket = innings.timeline.filter(ball => 
+              ball.over !== undefined && ball.over < fow.over
+            );
+            
+            // Get unique batsmen IDs from this period
+            const batsmanIds = [...new Set(timelineBeforeWicket.map(ball => ball.batsmanId))];
+            
+            if (batsmanIds.length >= 2) {
+              const batsman1 = innings.battingTeam.players.find(p => p.id === batsmanIds[batsmanIds.length - 2]);
+              const batsman2 = innings.battingTeam.players.find(p => p.id === batsmanIds[batsmanIds.length - 1]);
+              
+              if (batsman1 && batsman2) {
+                allPartnerships.push({
+                  player1Name: batsman1.name,
+                  player2Name: batsman2.name,
+                  teamName: innings.battingTeam.name,
+                  runs: partnershipRuns,
+                  matchNumber: match.matchNumber,
+                });
+              }
+            }
+          }
+          
+          previousScore = fow.score;
+          previousOver = fow.over;
+        });
+        
+        // Check current partnership if it exists and has runs
+        if (innings.currentPartnership.runs > 0) {
+          const batsman1 = innings.battingTeam.players.find(p => p.id === innings.currentPartnership.batsman1);
+          const batsman2 = innings.battingTeam.players.find(p => p.id === innings.currentPartnership.batsman2);
+          
+          if (batsman1 && batsman2) {
+            allPartnerships.push({
+              player1Name: batsman1.name,
+              player2Name: batsman2.name,
+              teamName: innings.battingTeam.name,
+              runs: innings.currentPartnership.runs,
+              matchNumber: match.matchNumber,
+            });
+          }
+        }
+      });
+    }
+  });
+
+  // Sort by runs and return top 5
+  return allPartnerships
+    .sort((a, b) => b.runs - a.runs)
+    .slice(0, 5);
+}
+
+function computeTopPerformances(tournament: Tournament) {
+  const topBatting: Array<{ playerName: string, runs: number, teamName: string, balls: number, fours: number, sixes: number }> = [];
+  const topBowling: Array<{ playerName: string, wickets: number, runs: number, teamName: string, overs: number, maidens: number, economy: number }> = [];
+
+  tournament.matches.forEach(match => {
+    if (match.status === 'finished' && match.matchData) {
+      match.matchData.innings.forEach((innings, index) => {
+        // Collect batting performances
+        innings.battingTeam.players.forEach(player => {
+          if (player.batting.runs > 0) {
+            topBatting.push({
+              playerName: player.name,
+              runs: player.batting.runs,
+              teamName: innings.battingTeam.name,
+              balls: player.batting.ballsFaced,
+              fours: player.batting.fours,
+              sixes: player.batting.sixes,
+            });
+          }
+        });
+
+        // Collect bowling performances
+        innings.bowlingTeam.players.forEach(player => {
+          if (player.bowling.wickets > 0) {
+            topBowling.push({
+              playerName: player.name,
+              wickets: player.bowling.wickets,
+              runs: player.bowling.runsConceded,
+              teamName: innings.bowlingTeam.name,
+              overs: Math.floor(player.bowling.ballsBowled / 6) + (player.bowling.ballsBowled % 6) / 10,
+              maidens: player.bowling.maidens,
+              economy: player.bowling.economyRate,
+            });
+          }
+        });
+      });
+    }
+  });
+
+  // Sort and get top 3
+  const sortedBatting = topBatting.sort((a, b) => b.runs - a.runs).slice(0, 3);
+  const sortedBowling = topBowling.sort((a, b) => {
+    if (a.wickets !== b.wickets) return b.wickets - a.wickets;
+    return a.runs - b.runs;
+  }).slice(0, 3);
+
+  return { topBatting: sortedBatting, topBowling: sortedBowling };
 }
 
 function computeTournamentAwards(tournament: Tournament, playerStats: PlayerStats[]): {
@@ -178,6 +325,7 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
   const [showTossInterface, setShowTossInterface] = useState(false);
   const [tossWinner, setTossWinner] = useState<string>('');
   const [tossDecision, setTossDecision] = useState<'bat' | 'bowl'>('bat');
+  const [rainProbability, setRainProbability] = useState<number>(0);
   const [currentTournamentMatchId, setCurrentTournamentMatchId] = useState<string | null>(null);
   const [showPlayerData, setShowPlayerData] = useState(false);
   const { toast } = useToast();
@@ -526,61 +674,20 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
       return;
     }
 
-    let firstBattingTeam, firstBowlingTeam;
-    if ((tossWinner === team1.name && tossDecision === 'bat') || (tossWinner === team2.name && tossDecision === 'bowl')) {
-      firstBattingTeam = matchTeam1;
-      firstBowlingTeam = matchTeam2;
-    } else {
-      firstBattingTeam = matchTeam2;
-      firstBowlingTeam = matchTeam1;
-    }
-
-    // Set initial batting status for first 11 players (or all if less than 11)
-    const maxBattingPlayers = Math.min(11, firstBattingTeam.players.length);
-    firstBattingTeam.players.forEach((p, i) => {
-      p.batting.status = (i >= maxBattingPlayers ? 'did not bat' : 'not out') as 'not out' | 'out' | 'did not bat';
-    });
-
-    // Set substitute status for players beyond 11
-    firstBattingTeam.players.forEach((p, i) => {
-      p.isSubstitute = i >= 11;
-    });
-    firstBowlingTeam.players.forEach((p, i) => {
-      p.isSubstitute = i >= 11;
-    });
-
-    const matchData: Match = {
-      id: `match_${Date.now()}`,
-      teams: [matchTeam1, matchTeam2],
+    // Create match settings with rain probability
+    const matchSettings = {
+      teamNames: [team1.name, team2.name] as [string, string],
       oversPerInnings: tournament.settings.oversPerInnings,
-      toss: { winner: tossWinner, decision: tossDecision },
-      innings: [
-        {
-          battingTeam: firstBattingTeam,
-          bowlingTeam: firstBowlingTeam,
-          score: 0,
-          wickets: 0,
-          overs: 0,
-          ballsThisOver: 0,
-          timeline: [],
-          fallOfWickets: [],
-          currentPartnership: {
-            batsman1: firstBattingTeam.players[0]?.id || 0,
-            batsman2: firstBattingTeam.players[1]?.id || 0,
-            runs: 0,
-            balls: 0,
-          },
-          batsmanOnStrike: firstBattingTeam.players[0]?.id || 0,
-          batsmanNonStrike: firstBattingTeam.players[1]?.id || 0,
-          currentBowler: firstBowlingTeam.players[0]?.id || 0,
-          fieldPlacements: [],
-          isFreeHit: false,
-        }
-      ],
-      currentInnings: 1,
-      status: 'inprogress',
+      toss: { 
+        winner: tossWinner, 
+        decision: tossDecision 
+      },
       matchType: tournament.settings.matchType,
+      rainProbability: rainProbability, // Default to no rain, can be enhanced later
     };
+
+    // Use the new createMatch function
+    const matchData = createMatch([matchTeam1, matchTeam2], matchSettings);
 
     // Update match status to inprogress
     const updatedMatches = tournament.matches.map(m => 
@@ -598,9 +705,9 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
     onTournamentUpdate(updatedTournament);
     setCurrentMatch(matchData);
     setShowTossInterface(false);
-    setSelectedMatch(null);
     setTossWinner('');
     setTossDecision('bat');
+    setRainProbability(0);
   };
 
   const simulateToss = () => {
@@ -688,56 +795,17 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
       return;
     }
 
-    // Determine which team bats first based on toss
-    const firstBattingTeam = matchTeam1; // Team 1 always bats first for simplicity
-    const firstBowlingTeam = matchTeam2;
-
-    // Set initial batting status for first 11 players (or all if less than 11)
-    const maxBattingPlayers = Math.min(11, firstBattingTeam.players.length);
-    firstBattingTeam.players.forEach((p, i) => {
-      p.batting.status = (i >= maxBattingPlayers ? 'did not bat' : 'not out') as 'not out' | 'out' | 'did not bat';
-    });
-
-    // Set substitute status for players beyond 11
-    firstBattingTeam.players.forEach((p, i) => {
-      p.isSubstitute = i >= 11;
-    });
-    firstBowlingTeam.players.forEach((p, i) => {
-      p.isSubstitute = i >= 11;
-    });
-
-    const matchData: Match = {
-      id: `match_${Date.now()}`,
-      teams: [matchTeam1, matchTeam2],
+    // Create match settings with rain probability
+    const matchSettings = {
+      teamNames: [team1.name, team2.name] as [string, string],
       oversPerInnings: tournament.settings.oversPerInnings,
-      toss: { winner: team1.name, decision: 'bat' },
-      innings: [
-        {
-          battingTeam: firstBattingTeam,
-          bowlingTeam: firstBowlingTeam,
-          score: 0,
-          wickets: 0,
-          overs: 0,
-          ballsThisOver: 0,
-          timeline: [],
-          fallOfWickets: [],
-          currentPartnership: {
-            batsman1: firstBattingTeam.players[0]?.id || 0,
-            batsman2: firstBattingTeam.players[1]?.id || 0,
-            runs: 0,
-            balls: 0,
-          },
-          batsmanOnStrike: firstBattingTeam.players[0]?.id || 0,
-          batsmanNonStrike: firstBattingTeam.players[1]?.id || 0,
-          currentBowler: firstBowlingTeam.players[0]?.id || 0,
-          fieldPlacements: [],
-          isFreeHit: false,
-        }
-      ],
-      currentInnings: 1,
-      status: 'inprogress',
+      toss: { winner: team1.name, decision: 'bat' as const },
       matchType: tournament.settings.matchType,
+      rainProbability: rainProbability, // Default to no rain, can be enhanced later
     };
+
+    // Use the new createMatch function
+    const matchData = createMatch([matchTeam1, matchTeam2], matchSettings);
 
     // Update match status to inprogress
     const updatedMatches = tournament.matches.map(m => 
@@ -1121,6 +1189,8 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
 
   const awards = computeTournamentAwards(tournament, playerStats);
   const { bestBatting, bestBowling } = computeIndividualPerformances(tournament);
+  const topPartnerships = computeBestPartnership(tournament);
+  const { topBatting, topBowling } = computeTopPerformances(tournament);
   const leaderboards = computeLeaderboards(playerStats);
   const finishedMatches = [...tournament.matches].filter(m => m.status === 'finished' && m.matchData);
   const lastFinished = finishedMatches.length ? finishedMatches.sort((a,b)=> (b.completedDate? new Date(b.completedDate).getTime():0) - (a.completedDate? new Date(a.completedDate).getTime():0))[0] : null;
@@ -1342,7 +1412,12 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <Button variant="outline" onClick={() => setShowTossInterface(false)}>
+          <Button variant="outline" onClick={() => {
+            setShowTossInterface(false);
+            setTossWinner('');
+            setTossDecision('bat');
+            setRainProbability(0);
+          }}>
             ← Back to Tournament
           </Button>
           <h2 className="text-xl font-semibold">Toss & Decision</h2>
@@ -1414,6 +1489,66 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
                     </div>
                   </div>
                 )}
+
+                {/* Rain Probability Meter */}
+                <div className="space-y-4 mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <h4 className="text-lg font-semibold flex items-center gap-2 text-blue-800">
+                    <CloudRain className="w-5 h-5" />
+                    Weather Conditions
+                  </h4>
+                  
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-4">
+                      <Input
+                        type="number"
+                        min="0"
+                        max="100"
+                        placeholder="0"
+                        value={rainProbability}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          if (value === '' || isNaN(parseInt(value, 10))) {
+                            setRainProbability(0);
+                          } else {
+                            setRainProbability(parseInt(value, 10));
+                          }
+                        }}
+                        className="w-24"
+                      />
+                      <span className="text-sm text-muted-foreground">%</span>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Chance of Rain</span>
+                        <span className="font-medium">{rainProbability}%</span>
+                      </div>
+                      <Progress value={rainProbability} className="h-2" />
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <div className="flex items-center gap-1">
+                          <Sun className="w-3 h-3" />
+                          <span>Clear</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Cloud className="w-3 h-3" />
+                          <span>Cloudy</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <CloudRain className="w-3 h-3" />
+                          <span>Rain</span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {rainProbability > 0 && (
+                      <div className="p-3 bg-blue-100 rounded-md">
+                        <p className="text-sm text-blue-700">
+                          <strong>Note:</strong> If rain occurs during the match, overs may be reduced and targets adjusted using Duckworth-Lewis calculations.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
 
                 <Button 
                   onClick={handleTossComplete}
@@ -1742,19 +1877,30 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Trophy className="w-5 h-5 text-orange-500" />
-                  Best Batting Performance
+                  Top 3 Batting Performances
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {bestBatting ? (
-                  <div className="flex items-center justify-between text-sm">
-                    <div>
-                      <p className="font-semibold">{bestBatting.playerName}</p>
-                      <p className="text-muted-foreground">{bestBatting.teamName}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold text-lg text-orange-600">{bestBatting.runs} runs</p>
-                    </div>
+                {topBatting.length > 0 ? (
+                  <div className="space-y-3">
+                    {topBatting.map((performance, index) => (
+                      <div key={index} className="flex items-center justify-between p-2 bg-orange-50 rounded-md">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-orange-600 bg-orange-100 px-2 py-1 rounded-full">{index + 1}</span>
+                          <div>
+                            <p className="font-semibold text-sm">{performance.playerName}</p>
+                            <p className="text-xs text-muted-foreground">{performance.teamName}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold text-lg text-orange-600">{performance.runs} runs</p>
+                          <p className="text-xs text-muted-foreground">{performance.balls} balls</p>
+                          <p className="text-xs text-muted-foreground">
+                            {performance.fours}x4, {performance.sixes}x6
+                          </p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 ) : (
                   <div className="text-center py-4">
@@ -1768,19 +1914,30 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Target className="w-5 h-5 text-purple-500" />
-                  Best Bowling Performance
+                  Top 3 Bowling Performances
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {bestBowling ? (
-                  <div className="flex items-center justify-between text-sm">
-                    <div>
-                      <p className="font-semibold">{bestBowling.playerName}</p>
-                      <p className="text-muted-foreground">{bestBowling.teamName}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold text-lg text-purple-600">{bestBowling.wickets}/{bestBowling.runs}</p>
-                    </div>
+                {topBowling.length > 0 ? (
+                  <div className="space-y-3">
+                    {topBowling.map((performance, index) => (
+                      <div key={index} className="flex items-center justify-between p-2 bg-purple-50 rounded-md">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-purple-600 bg-purple-100 px-2 py-1 rounded-full">{index + 1}</span>
+                          <div>
+                            <p className="font-semibold text-sm">{performance.playerName}</p>
+                            <p className="text-xs text-muted-foreground">{performance.teamName}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold text-lg text-purple-600">{performance.wickets}/{performance.runs}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {performance.overs.toFixed(1)} overs, {performance.maidens} maidens
+                          </p>
+                          <p className="text-xs text-muted-foreground">Econ: {performance.economy.toFixed(2)}</p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 ) : (
                   <div className="text-center py-4">
@@ -1792,6 +1949,52 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
             </Card>
           </div>
           
+          {/* Top Partnerships Award */}
+          {topPartnerships.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="w-5 h-5 text-green-500" />
+                  Top 5 Partnerships
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {topPartnerships.map((partnership, index) => (
+                    <div key={index} className="p-3 bg-green-50 rounded-md border border-green-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-green-600 bg-green-100 px-2 py-1 rounded-full">
+                          #{index + 1}
+                        </span>
+                        <span className="text-sm text-muted-foreground">
+                          Match #{partnership.matchNumber}
+                        </span>
+                      </div>
+                      
+                      <div className="flex items-center justify-center gap-3 mb-2">
+                        <div className="text-center">
+                          <p className="font-semibold text-sm">{partnership.player1Name}</p>
+                          <p className="text-xs text-muted-foreground">Player 1</p>
+                        </div>
+                        <div className="text-lg font-bold text-green-600">+</div>
+                        <div className="text-center">
+                          <p className="font-semibold text-sm">{partnership.player2Name}</p>
+                          <p className="text-xs text-muted-foreground">Player 2</p>
+                        </div>
+                      </div>
+                      
+                      <div className="text-center">
+                        <p className="font-bold text-xl text-green-600">{partnership.runs} runs</p>
+                        <p className="text-sm text-muted-foreground">{partnership.teamName}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Advanced Awards */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">

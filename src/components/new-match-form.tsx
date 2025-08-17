@@ -1,36 +1,27 @@
 "use client";
 
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import { MatchType, type MatchSettings } from '@/types';
+import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { Separator } from './ui/separator';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Separator } from '@/components/ui/separator';
+import { Progress } from '@/components/ui/progress';
+import { CloudRain, Cloud, Sun } from 'lucide-react';
+import { MatchType } from '@/types';
 
 const formSchema = z.object({
-  team1Name: z.string().min(1, 'Team name is required'),
-  team2Name: z.string().min(1, 'Team name is required'),
+  team1Name: z.string().min(1, 'Team 1 name is required'),
+  team2Name: z.string().min(1, 'Team 2 name is required'),
   overs: z.coerce.number().min(1, 'Minimum 1 over').max(100, 'Maximum 100 overs'),
   tossWinner: z.enum(['team1', 'team2']),
   decision: z.enum(['bat', 'bowl']),
   matchType: z.nativeEnum(MatchType),
+  rainProbability: z.coerce.number().min(0, 'Minimum 0%').max(100, 'Maximum 100%').optional(),
 });
 
 type NewMatchFormProps = {
@@ -53,6 +44,7 @@ export default function NewMatchForm({ onNewMatch, prefillSettings }: NewMatchFo
       tossWinner: prefillSettings?.toss.winner === prefillSettings?.teamNames[0] ? 'team1' : 'team2',
       decision: prefillSettings?.toss.decision || 'bat',
       matchType: prefillSettings?.matchType || MatchType.T20,
+      rainProbability: 0,
     },
   });
 
@@ -103,6 +95,7 @@ export default function NewMatchForm({ onNewMatch, prefillSettings }: NewMatchFo
         },
         matchType: values.matchType,
         specialPlayerIds,
+        rainProbability: values.rainProbability || 0,
       };
 
       onNewMatch(settings);
@@ -117,6 +110,7 @@ export default function NewMatchForm({ onNewMatch, prefillSettings }: NewMatchFo
           decision: values.decision,
         },
         matchType: values.matchType,
+        rainProbability: values.rainProbability || 0,
       };
       onNewMatch(settings);
     }
@@ -261,6 +255,73 @@ export default function NewMatchForm({ onNewMatch, prefillSettings }: NewMatchFo
               )}
             />
           </div>
+        </div>
+
+        <Separator />
+
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <CloudRain className="w-5 h-5 text-blue-500" />
+            Weather Conditions
+          </h3>
+          
+          <FormField
+            control={form.control}
+            name="rainProbability"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Rain Probability</FormLabel>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-4">
+                    <Input
+                      type="number"
+                      min="0"
+                      max="100"
+                      placeholder="0"
+                      {...field}
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value) || 0;
+                        field.onChange(value);
+                      }}
+                      className="w-24"
+                    />
+                    <span className="text-sm text-muted-foreground">%</span>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Chance of Rain</span>
+                      <span className="font-medium">{field.value || 0}%</span>
+                    </div>
+                    <Progress value={field.value || 0} className="h-2" />
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <Sun className="w-3 h-3" />
+                        <span>Clear</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Cloud className="w-3 h-3" />
+                        <span>Cloudy</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <CloudRain className="w-3 h-3" />
+                        <span>Rain</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {field.value && field.value > 0 && (
+                    <div className="p-3 bg-blue-50 rounded-md">
+                      <p className="text-sm text-blue-700">
+                        <strong>Note:</strong> If rain occurs during the match, overs may be reduced and targets adjusted using Duckworth-Lewis calculations.
+                      </p>
+                    </div>
+                  )}
+                </div>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
         </div>
 
         <Button type="submit" className="w-full">

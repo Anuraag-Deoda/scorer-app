@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from 'react';
 import type { Match, BallEvent, Team, BallDetails, GenerateMatchCommentaryInput, FielderPlacement } from "@/types"
-import { processBall, undoLastBall, updateFieldPlacements, getMatchSituation, getPowerplayOvers } from "@/lib/cricket-logic"
+import { processBall, undoLastBall, updateFieldPlacements, getMatchSituation, getPowerplayOvers, handleRainInterruption } from "@/lib/cricket-logic"
 import { generateMatchCommentary } from "@/ai/flows/generate-match-commentary";
 import { Button } from "../components/ui/button"
 import { BallOutcome } from "@/simulation/types";
@@ -68,6 +68,32 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
 
     const newMatchState = processBall(match, { event, runs, extras, wicketType, fielderId });
     if(newMatchState) {
+        // Check for rain interruption after manual ball scoring
+        if (newMatchState.rainSimulation?.willRain) {
+          const currentOver = Math.floor(newMatchState.innings[newMatchState.currentInnings - 1].overs);
+          const currentInningsNumber = newMatchState.currentInnings;
+          
+          // Check if rain should interrupt now
+          if (currentOver >= (newMatchState.rainSimulation.interruptionOver || 0) && 
+              currentInningsNumber === newMatchState.rainSimulation.interruptionInnings) {
+            
+            // Apply rain interruption
+            const rainInterruptedMatch = handleRainInterruption(newMatchState, currentOver, currentInningsNumber);
+            
+            // Show rain notification
+            if (rainInterruptedMatch.rainSimulation?.rainMessage) {
+              toast({
+                title: "🌧️ Rain Interruption!",
+                description: rainInterruptedMatch.rainSimulation.rainMessage,
+                duration: 5000,
+              });
+            }
+            
+            setMatch(rainInterruptedMatch);
+            return;
+          }
+        }
+        
         setMatch(newMatchState);
     }
   }
@@ -177,7 +203,7 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
       const result = await response.json();
 
       toast({
-        title: `Simulation Complete (${result.debug.pattern || result.debug.flow})`,
+        // title: `Simulation Complete (${result.debug.pattern || result.debug.flow})`,
         description: `Strategy: ${result.cost > 0 ? 'AI' : 'Rule-Based'}. Cost: $${result.cost.toFixed(4)}`,
       });
 
@@ -191,11 +217,37 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
 
         if (processedMatchState) {
           matchState = processedMatchState;
+          
+          // Check for rain interruption after each ball
+          if (matchState.rainSimulation?.willRain) {
+            const currentOver = Math.floor(matchState.innings[matchState.currentInnings - 1].overs);
+            const currentInningsNumber = matchState.currentInnings;
+            
+            // Check if rain should interrupt now
+            if (currentOver >= (matchState.rainSimulation.interruptionOver || 0) && 
+                currentInningsNumber === matchState.rainSimulation.interruptionInnings) {
+              
+              // Apply rain interruption
+              const rainInterruptedMatch = handleRainInterruption(matchState, currentOver, currentInningsNumber);
+              matchState = rainInterruptedMatch;
+              
+              // Show rain notification
+              if (rainInterruptedMatch.rainSimulation?.rainMessage) {
+                toast({
+                  title: "🌧️ Rain Interruption!",
+                  description: rainInterruptedMatch.rainSimulation.rainMessage,
+                  duration: 5000,
+                });
+              }
+            }
+          }
+          
           setMatch(matchState);
 
           if (matchState.status !== 'finished') {
             const ballNum = `${matchState.innings[matchState.currentInnings - 1].overs}.${matchState.innings[matchState.currentInnings - 1].ballsThisOver}`;
-            await handleGenerateCommentary(matchState, ballDetails, ballNum);
+            //await handleGenerateCommentary(matchState, ballDetails, ballNum);
+            await new Promise(resolve => setTimeout(resolve, 1500));
           }
         } else {
           break; // Stop processing if match state is invalid

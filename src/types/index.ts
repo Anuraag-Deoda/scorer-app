@@ -137,6 +137,17 @@ export interface Match {
     prashantIds: number[];
     harshalIds: number[];
   };
+  rainSimulation?: {
+    probability: number; // Rain probability percentage (0-100)
+    willRain: boolean; // Whether rain will occur based on probability
+    interruptionOver?: number; // At which over rain will interrupt (random)
+    interruptionInnings?: 1 | 2; // Which innings will be affected
+    originalTarget?: number; // Original target for DLS calculation
+    originalOvers?: number; // Original overs for DLS calculation
+    dlsTarget?: number; // Revised target after rain
+    dlsOvers?: number; // Revised overs after rain
+    rainMessage?: string; // Message about rain interruption
+  };
 }
 
 export type BallEvent = 'run' | 'w' | 'wd' | 'nb' | 'lb' | 'b';
@@ -154,6 +165,7 @@ export interface MatchSettings {
     prashantIds: number[];
     harshalIds: number[];
   };
+  rainProbability?: number; // Rain probability percentage (0-100)
 }
 
 export interface BallDetails {
@@ -296,6 +308,17 @@ export interface TournamentMatch {
 export interface TournamentAwards {
   playerOfSeriesId?: number;
   playerOfSeriesName?: string;
+  bestPartnership?: {
+    player1Id: number;
+    player1Name: string;
+    player2Id: number;
+    player2Name: string;
+    teamId: number;
+    teamName: string;
+    runs: number;
+    matchId: string;
+    matchNumber: number;
+  };
   categories?: {
     orangeCapTop5?: number[]; // playerIds by runs
     purpleCapTop5?: number[]; // playerIds by wickets

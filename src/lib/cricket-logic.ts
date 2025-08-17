@@ -2,7 +2,8 @@ import type { Match, MatchSettings, Innings, Team, Player, Ball, BallDetails, Fi
 import { PlayerRole as PlayerRoleEnum, BowlingStyle as BowlingStyleEnum, MatchType } from '@/types';
 
 const MAX_PLAYERS = 11;
-const SQUAD_SIZE = 15;
+const SQUAD_SIZE = 13;
+const MAX_Squad_Size = 15; // Maximum squad size for a team
 const SAVED_TEAMS_KEY = 'cricket-clash-saved-teams';
 
 function createPlayer(id: number, name: string, rating: number, role?: PlayerRole, bowlingStyle?: BowlingStyle): Player {
@@ -54,53 +55,26 @@ function createInnings(battingTeam: Team, bowlingTeam: Team): Innings {
   };
 }
 
-export function createMatch(settings: MatchSettings, allPlayers: Player[]): Match {
-  let savedTeams: Record<string, Player[]> = {};
-  try {
-      const savedTeamsData = localStorage.getItem(SAVED_TEAMS_KEY);
-      if (savedTeamsData) {
-          savedTeams = JSON.parse(savedTeamsData);
-      }
-  } catch (e) {
-      console.error("Could not load saved teams", e);
+export function createMatch(teams: Team[], settings: MatchSettings): Match {
+  // Validate teams
+  if (teams.length !== 2) {
+    throw new Error('Match must have exactly 2 teams');
   }
 
-  const getTeamPlayers = (name: string): Player[] => {
-      if (savedTeams[name]) {
-          // When loading from saved teams, ensure role and bowlingStyle are carried over
-          return savedTeams[name].map(p => createPlayer(p.id, p.name, p.rating ?? 75, p.role, p.bowlingStyle));
-      }
-      const shuffledPlayers = [...allPlayers].sort(() => 0.5 - Math.random());
-      // Assign default roles/bowling styles or handle appropriately
-      return shuffledPlayers.slice(0, SQUAD_SIZE).map((p, index) => {
-        let role = PlayerRoleEnum.Batsman; // Default role
-        let bowlingStyle: BowlingStyle | undefined = undefined;
-
-        // Simple assignment for demonstration - replace with more sophisticated logic
-        if (index === 0) role = PlayerRoleEnum.WicketKeeper; // Assume first player is WK
-        else if (index >= 7) { // Assume players 8-11 are bowlers/allrounders
-            role = Math.random() > 0.5 ? PlayerRoleEnum.Bowler : PlayerRoleEnum.AllRounder;
-            // Assign a random bowling style for bowlers/allrounders
-            const styles = Object.values(BowlingStyleEnum);
-            bowlingStyle = styles[Math.floor(Math.random() * styles.length)];
-        }
-
-        return createPlayer(p.id, p.name, p.rating ?? 75, role, bowlingStyle);
-      });
-  };
-  
-  const team1Players = getTeamPlayers(settings.teamNames[0]);
-  const team2Players = getTeamPlayers(settings.teamNames[1]);
-
-  const teams: [Team, Team] = [
-    createTeam(0, settings.teamNames[0], team1Players),
-    createTeam(1, settings.teamNames[1], team2Players),
-  ];
-  
+  // Ensure all teams have at least MAX_PLAYERS (11) players for a match
   teams.forEach(team => {
-      for (let i = MAX_PLAYERS; i < SQUAD_SIZE; i++) {
-          if(team.players[i]) team.players[i].isSubstitute = true;
+    if (team.players.length < MAX_PLAYERS) {
+      throw new Error(`Team ${team.name} must have at least ${MAX_PLAYERS} players to start a match`);
+    }
+  });
+
+  // Set substitutes for teams with more than MAX_PLAYERS
+  teams.forEach(team => {
+    if (team.players.length > MAX_PLAYERS) {
+      for (let i = MAX_PLAYERS; i < team.players.length; i++) {
+        team.players[i].isSubstitute = true;
       }
+    }
   });
 
   const battingFirstTeam = settings.toss.winner === teams[0].name
@@ -111,6 +85,30 @@ export function createMatch(settings: MatchSettings, allPlayers: Player[]): Matc
 
   const innings = createInnings(battingFirstTeam, bowlingFirstTeam);
 
+  // Rain simulation logic
+  let rainSimulation: Match['rainSimulation'] | undefined;
+  if (settings.rainProbability && settings.rainProbability > 0) {
+    const willRain = Math.random() * 100 < settings.rainProbability;
+    
+    if (willRain) {
+      // Determine which innings will be affected (1st or 2nd)
+      const interruptionInnings = Math.random() < 0.6 ? 1 : 2; // 60% chance 1st innings, 40% 2nd innings
+      
+      // Determine at which over rain will interrupt (random between 20% and 80% of innings)
+      const minOver = Math.max(1, Math.floor(settings.oversPerInnings * 0.2));
+      const maxOver = Math.floor(settings.oversPerInnings * 0.8);
+      const interruptionOver = Math.floor(Math.random() * (maxOver - minOver + 1)) + minOver;
+      
+      rainSimulation = {
+        probability: settings.rainProbability,
+        willRain: true,
+        interruptionOver,
+        interruptionInnings,
+        originalOvers: settings.oversPerInnings,
+      };
+    }
+  }
+
   return {
     id: `match_${Date.now()}`,
     teams,
@@ -120,6 +118,7 @@ export function createMatch(settings: MatchSettings, allPlayers: Player[]): Matc
     currentInnings: 1,
     status: 'inprogress',
     matchType: settings.matchType,
+    rainSimulation,
   };
 }
 
@@ -723,4 +722,82 @@ export function calculateRequiredRunRate(target: number, score: number, ballsRem
   const runsNeeded = target - score;
   if (runsNeeded <= 0) return 0;
   return (runsNeeded / ballsRemaining) * 6;
+}
+
+export function handleRainInterruption(match: Match, currentOver: number, currentInnings: number): Match {
+  if (!match.rainSimulation?.willRain) {
+    return match;
+  }
+
+  const newMatch = JSON.parse(JSON.stringify(match));
+  const { interruptionOver, interruptionInnings, originalOvers } = match.rainSimulation;
+
+  // Check if rain should occur now
+  if (currentInnings === interruptionInnings && currentOver >= interruptionOver) {
+    // Calculate overs lost dynamically (more exciting than fixed 16 overs)
+    const maxOversLost = Math.floor(originalOvers * 0.35); // Max 35% reduction
+    
+    // Dynamic overs reduction based on when rain occurs
+    let oversLost;
+    if (interruptionInnings === 1) {
+      // Rain during 1st innings - more dramatic effect
+      const progressThroughInnings = currentOver / originalOvers;
+      if (progressThroughInnings < 0.3) {
+        // Early rain - significant reduction
+        oversLost = Math.floor(originalOvers * 0.25);
+      } else if (progressThroughInnings < 0.6) {
+        // Mid innings rain - moderate reduction
+        oversLost = Math.floor(originalOvers * 0.2);
+      } else {
+        // Late innings rain - minimal reduction
+        oversLost = Math.floor(originalOvers * 0.15);
+      }
+    } else {
+      // Rain during 2nd innings - affects chase strategy
+      const progressThroughChase = currentOver / originalOvers;
+      if (progressThroughChase < 0.4) {
+        // Early chase rain - significant target revision
+        oversLost = Math.floor(originalOvers * 0.3);
+      } else if (progressThroughChase < 0.7) {
+        // Mid chase rain - moderate revision
+        oversLost = Math.floor(originalOvers * 0.2);
+      } else {
+        // Late chase rain - minimal revision
+        oversLost = Math.floor(originalOvers * 0.1);
+      }
+    }
+    
+    // Ensure overs lost doesn't exceed maximum
+    oversLost = Math.min(oversLost, maxOversLost);
+    const newOvers = originalOvers - oversLost;
+    
+    if (interruptionInnings === 1) {
+      // Rain during 1st innings - reduce overs for both innings
+      newMatch.oversPerInnings = newOvers;
+      newMatch.rainSimulation!.dlsOvers = newOvers;
+      newMatch.rainSimulation!.rainMessage = `🌧️ Rain interrupted play after ${currentOver} overs! Match reduced to ${newOvers} overs per innings.`;
+    } else {
+      // Rain during 2nd innings - calculate DLS target
+      const firstInningsScore = newMatch.innings[0].score;
+      const oversRemaining = newOvers - currentOver;
+      const totalOvers = originalOvers;
+      
+      // Enhanced DLS calculation with more excitement
+      const resourcesUsed = currentOver / totalOvers;
+      const resourcesRemaining = oversRemaining / totalOvers;
+      
+      // More sophisticated target calculation
+      let dlsTarget = Math.round(firstInningsScore * (resourcesRemaining / (1 - resourcesUsed)));
+      
+      // Add some randomness for excitement (within reasonable bounds)
+      const randomFactor = 0.95 + (Math.random() * 0.1); // 95% to 105%
+      dlsTarget = Math.round(dlsTarget * randomFactor);
+      
+      newMatch.rainSimulation!.dlsTarget = dlsTarget;
+      newMatch.rainSimulation!.dlsOvers = newOvers;
+      newMatch.rainSimulation!.rainMessage = `🌧️ Rain interrupted chase after ${currentOver} overs! Target revised to ${dlsTarget} runs in ${oversRemaining} overs.`;
+    }
+  }
+
+  return newMatch;
 }

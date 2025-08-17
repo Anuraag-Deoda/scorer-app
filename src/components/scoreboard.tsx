@@ -509,10 +509,26 @@ function ScoreboardContent({ match, setMatch, onBowlerChange, isSimulating }: { 
                 </p>
               </div>
             )}
-            {showBowlerSelection && !isSimulating ? (
-                <BowlerSelection />
-            ) : (
-                <Tabs defaultValue="scoreboard" className="w-full max-w-full">
+            {showBowlerSelection && !isSimulating && (
+                <div className="p-4 text-center bg-yellow-50 border-b border-yellow-200">
+                    <h4 className="font-semibold text-lg text-yellow-800 mb-2">Select Next Bowler</h4>
+                    <p className="text-muted-foreground text-sm mb-3">Choose the player to bowl the next over.</p>
+                    <Select onValueChange={(val) => onBowlerChange(parseInt(val, 10))}>
+                        <SelectTrigger id="bowler-select" className="w-[75%] mx-auto">
+                            <SelectValue placeholder="Select new bowler" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {currentInnings.bowlingTeam.players.filter(p => (!p.isSubstitute || p.isImpactPlayer)).map(p => (
+                                <SelectItem key={p.id} value={p.id.toString()}>
+                                    {p.name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+            )}
+            
+            <Tabs defaultValue="scoreboard" className="w-full max-w-full">
                     <TabsList className="grid w-full grid-cols-5 sm:grid-cols-10 rounded-b-none h-auto bg-card border-b overflow-x-auto max-w-full">
                         <TooltipProvider>
                             <ShadTooltip>
@@ -623,7 +639,20 @@ function ScoreboardContent({ match, setMatch, onBowlerChange, isSimulating }: { 
                         </Tabs>
                     </TabsContent>
                 <TabsContent value="timeline" className="p-0">
-                    <Timeline innings={match.innings[match.currentInnings - 1]} />
+                    <Tabs defaultValue="innings1" className="w-full">
+                        <TabsList className="grid w-full grid-cols-2 bg-card rounded-md">
+                            <TabsTrigger value="innings1" className="rounded-md data-[state=active]:bg-primary/10 text-xs sm:text-sm">{innings1.battingTeam.name}</TabsTrigger>
+                            {innings2 && <TabsTrigger value="innings2" className="rounded-md data-[state=active]:bg-primary/10 text-xs sm:text-sm">{innings2.battingTeam.name}</TabsTrigger>}
+                        </TabsList>
+                        <TabsContent value="innings1" className="p-0 pt-3">
+                            <Timeline innings={innings1} />
+                        </TabsContent>
+                        {innings2 && (
+                            <TabsContent value="innings2" className="p-0 pt-3">
+                                <Timeline innings={innings2} />
+                            </TabsContent>
+                        )}
+                    </Tabs>
                 </TabsContent>
                 <TabsContent value="runrate" className="p-2 sm:p-3">
                     <RunRateChart />
@@ -662,7 +691,6 @@ function ScoreboardContent({ match, setMatch, onBowlerChange, isSimulating }: { 
                         </Tabs>
                     </TabsContent>
                 </Tabs>
-            )}
       </CardContent>
     </Card>
   );
