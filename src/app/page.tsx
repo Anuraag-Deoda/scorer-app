@@ -17,6 +17,7 @@ import PlayerRatingsDialog from '@/components/player-ratings-dialog';
 
 const LOCAL_STORAGE_KEY = 'cricket-clash-scorer-match';
 
+console.log = () => {}
 export default function Home() {
   const [match, setMatch] = useState<Match | null>(null);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
@@ -28,6 +29,7 @@ export default function Home() {
   const [isLoadingTournaments, setIsLoadingTournaments] = useState(false);
   const { toast } = useToast();
 
+console.log = () => {}
   useEffect(() => {
     setIsClient(true);
     // Fetch players from the API on load

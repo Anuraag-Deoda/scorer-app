@@ -379,6 +379,7 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
     const matchesByRound = Object.fromEntries(
       playoffRounds.map(r => [r, tournament.matches.find(m => m.round === r)])
     );
+    console.info('Checking playoff matches:', matchesByRound);
     const { qualifier1: q1, eliminator: elim, qualifier2: q2, final: finalMatch } = matchesByRound;
 
     // Only proceed if Q1 and Eliminator are finished, and Q2 or Final have TBD teams
@@ -2391,7 +2392,7 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
                     const player1Runs = partnership.player1Runs;
                     const player2Runs = partnership.player2Runs;
                     const totalRuns = partnership.runs;
-                    console.log(partnership, "topPartnerships");
+                    //console.log(partnership, "topPartnerships");
                     const player1Percentage = (player1Runs / totalRuns) * 100;
                     const player2Percentage = (player2Runs / totalRuns) * 100;
  
