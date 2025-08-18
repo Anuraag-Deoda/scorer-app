@@ -78,81 +78,85 @@ function computeBestPartnership(tournament: Tournament) {
   const allPartnerships: Array<{
     player1Name: string;
     player2Name: string;
+    player1Runs: number;
+    player2Runs: number;
     teamName: string;
     runs: number;
     matchNumber: number;
   }> = [];
-
-  tournament.matches.forEach(match => {
-    if (match.status === 'finished' && match.matchData) {
+ 
+  tournament.matches.forEach((match) => {
+    if (match.status === "finished" && match.matchData) {
       match.matchData.innings.forEach((innings, index) => {
-        // Calculate partnerships from fall of wickets
-        let previousScore = 0;
-        let previousOver = 0;
-        
-        if (innings.fallOfWickets.length === 0) {
-          // If no wickets, check current partnership
-          if (innings.currentPartnership.runs > 0) {
-            const batsman1 = innings.battingTeam.players.find(p => p.id === innings.currentPartnership.batsman1);
-            const batsman2 = innings.battingTeam.players.find(p => p.id === innings.currentPartnership.batsman2);
-            
-            if (batsman1 && batsman2) {
-              allPartnerships.push({
-                player1Name: batsman1.name,
-                player2Name: batsman2.name,
-                teamName: innings.battingTeam.name,
-                runs: innings.currentPartnership.runs,
-                matchNumber: match.matchNumber,
-              });
-            }
-          }
-          return;
-        }
-
-        // Calculate partnerships from fall of wickets
-        innings.fallOfWickets.forEach((fow, fowIndex) => {
-          const partnershipRuns = fow.score - previousScore;
-          
-          if (partnershipRuns > 0) {
-            // Find the two batsmen who were batting during this partnership
-            const timelineBeforeWicket = innings.timeline.filter(ball => 
-              ball.over !== undefined && ball.over < fow.over
-            );
-            
-            // Get unique batsmen IDs from this period
-            const batsmanIds = [...new Set(timelineBeforeWicket.map(ball => ball.batsmanId))];
-            
-            if (batsmanIds.length >= 2) {
-              const batsman1 = innings.battingTeam.players.find(p => p.id === batsmanIds[batsmanIds.length - 2]);
-              const batsman2 = innings.battingTeam.players.find(p => p.id === batsmanIds[batsmanIds.length - 1]);
-              
+        let currentPartnership = {
+          batsman1: -1,
+          batsman2: -1,
+          runs: 0,
+          balls: 0,
+          player1Runs: 0,
+          player2Runs: 0,
+        };
+ 
+        innings.timeline.forEach((ball) => {
+          if (
+            currentPartnership.batsman1 !== ball.batsmanId &&
+            currentPartnership.batsman2 !== ball.batsmanId
+          ) {
+            if (currentPartnership.runs > 0) {
+              const batsman1 = innings.battingTeam.players.find(
+                (p) => p.id === currentPartnership.batsman1
+              );
+              const batsman2 = innings.battingTeam.players.find(
+                (p) => p.id === currentPartnership.batsman2
+              );
               if (batsman1 && batsman2) {
                 allPartnerships.push({
                   player1Name: batsman1.name,
                   player2Name: batsman2.name,
+                  player1Runs: currentPartnership.player1Runs,
+                  player2Runs: currentPartnership.player2Runs,
                   teamName: innings.battingTeam.name,
-                  runs: partnershipRuns,
+                  runs: currentPartnership.runs,
                   matchNumber: match.matchNumber,
                 });
               }
             }
+            currentPartnership = {
+              batsman1: ball.batsmanId,
+              batsman2:
+                ball.batsmanId === currentPartnership.batsman1
+                  ? currentPartnership.batsman2
+                  : currentPartnership.batsman1,
+              runs: 0,
+              balls: 0,
+              player1Runs: 0,
+              player2Runs: 0,
+            };
           }
-          
-          previousScore = fow.score;
-          previousOver = fow.over;
+ 
+          currentPartnership.runs += ball.runs;
+          if (ball.batsmanId === currentPartnership.batsman1) {
+            currentPartnership.player1Runs += ball.runs;
+          } else {
+            currentPartnership.player2Runs += ball.runs;
+          }
         });
-        
-        // Check current partnership if it exists and has runs
-        if (innings.currentPartnership.runs > 0) {
-          const batsman1 = innings.battingTeam.players.find(p => p.id === innings.currentPartnership.batsman1);
-          const batsman2 = innings.battingTeam.players.find(p => p.id === innings.currentPartnership.batsman2);
-          
+ 
+        if (currentPartnership.runs > 0) {
+          const batsman1 = innings.battingTeam.players.find(
+            (p) => p.id === currentPartnership.batsman1
+          );
+          const batsman2 = innings.battingTeam.players.find(
+            (p) => p.id === currentPartnership.batsman2
+          );
           if (batsman1 && batsman2) {
             allPartnerships.push({
               player1Name: batsman1.name,
               player2Name: batsman2.name,
+              player1Runs: currentPartnership.player1Runs,
+              player2Runs: currentPartnership.player2Runs,
               teamName: innings.battingTeam.name,
-              runs: innings.currentPartnership.runs,
+              runs: currentPartnership.runs,
               matchNumber: match.matchNumber,
             });
           }
@@ -160,11 +164,8 @@ function computeBestPartnership(tournament: Tournament) {
       });
     }
   });
-
-  // Sort by runs and return top 5
-  return allPartnerships
-    .sort((a, b) => b.runs - a.runs)
-    .slice(0, 5);
+ 
+  return allPartnerships.sort((a, b) => b.runs - a.runs).slice(0, 5);
 }
 
 function computeTopPerformances(tournament: Tournament) {
@@ -330,9 +331,131 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
   const [showPlayerData, setShowPlayerData] = useState(false);
   const { toast } = useToast();
 
+  // Move autoSaveMatch above all its usages
+  const autoSaveMatch = (matchData: Match) => {
+    if (!matchData || !currentTournamentMatchId) return;
+    
+    // Save to localStorage as backup
+    const matchBackup = {
+      tournamentId: tournament.id,
+      matchId: currentTournamentMatchId,
+      matchData: matchData,
+      timestamp: new Date().toISOString(),
+    };
+    
+    localStorage.setItem(`match_backup_${tournament.id}_${currentTournamentMatchId}`, JSON.stringify(matchBackup));
+    
+    // Update tournament match data
+    const updatedMatches = tournament.matches.map(m => 
+      m.id === currentTournamentMatchId 
+        ? { ...m, matchData: matchData }
+        : m
+    );
+    
+    const updatedTournament = {
+      ...tournament,
+      matches: updatedMatches,
+    };
+    
+    // Update local state immediately (don't wait for API)
+    onTournamentUpdate(updatedTournament);
+
+    // Persist to backend
+    fetch(`/api/tournaments/${tournament.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ matches: updatedMatches }),
+    }).catch(error => console.error('Failed to auto-save match to backend:', error));
+  };
+
   useEffect(() => {
     calculatePlayerStats();
   }, [tournament]);
+
+  // --- PATCH: Ensure playoff matches update as soon as Q1 and Eliminator are finished ---
+  useEffect(() => {
+    // Only run if there are playoff matches
+    const playoffRounds = ["qualifier1", "eliminator", "qualifier2", "final"];
+    const matchesByRound = Object.fromEntries(
+      playoffRounds.map(r => [r, tournament.matches.find(m => m.round === r)])
+    );
+    const { qualifier1: q1, eliminator: elim, qualifier2: q2, final: finalMatch } = matchesByRound;
+
+    // Only proceed if Q1 and Eliminator are finished, and Q2 or Final have TBD teams
+    if (
+      q1 && elim && q2 && finalMatch &&
+      q1.status === "finished" && elim.status === "finished" &&
+      (
+        q2.team1Name === "TBD" || q2.team2Name === "TBD" ||
+        finalMatch.team1Name === "TBD" || finalMatch.team2Name === "TBD"
+      )
+    ) {
+      // Determine correct teams
+      const finishedQ1 = q1;
+      const finishedElim = elim;
+      const finishedQ2 = q2.status === "finished" ? q2 : null;
+
+      // Find winner/loser team IDs from Q1 and Eliminator
+      const q1WinnerId = finishedQ1.winnerTeamId;
+      const q1LoserId = finishedQ1.loserTeamId;
+      const elimWinnerId = finishedElim.winnerTeamId;
+
+      // Defensive: Only update if all IDs are present
+      if (q1WinnerId && q1LoserId && elimWinnerId) {
+        const q2Team1Id = elimWinnerId;
+        const q2Team2Id = q1LoserId;
+        const q2Team1Name = tournament.teams.find(t => t.id === q2Team1Id)?.name || "TBD";
+        const q2Team2Name = tournament.teams.find(t => t.id === q2Team2Id)?.name || "TBD";
+
+        // For Final, need Q1 winner and Q2 winner (if Q2 finished, else keep TBD)
+        const finalTeam1Id = q1WinnerId;
+        const finalTeam1Name = tournament.teams.find(t => t.id === finalTeam1Id)?.name || "TBD";
+        let finalTeam2Id = finalMatch.team2Id;
+        let finalTeam2Name = finalMatch.team2Name;
+        if (q2.status === "finished" && q2.winnerTeamId) {
+          finalTeam2Id = q2.winnerTeamId;
+          finalTeam2Name = tournament.teams.find(t => t.id === finalTeam2Id)?.name || "TBD";
+        } else {
+          finalTeam2Id = q2Team1Id && q2Team2Id ? undefined : finalMatch.team2Id;
+          finalTeam2Name = "TBD";
+        }
+
+        // Only update if values have changed
+        if (
+          q2.team1Id !== q2Team1Id || q2.team2Id !== q2Team2Id ||
+          q2.team1Name !== q2Team1Name || q2.team2Name !== q2Team2Name ||
+          finalMatch.team1Id !== finalTeam1Id || finalMatch.team1Name !== finalTeam1Name ||
+          finalMatch.team2Id !== finalTeam2Id || finalMatch.team2Name !== finalTeam2Name
+        ) {
+          const updatedMatches = tournament.matches.map(m => {
+            if (m.id === q2.id) {
+              return {
+                ...m,
+                team1Id: q2Team1Id,
+                team1Name: q2Team1Name,
+                team2Id: q2Team2Id,
+                team2Name: q2Team2Name,
+              };
+            }
+            if (m.id === finalMatch.id) {
+              return {
+                ...m,
+                team1Id: finalTeam1Id,
+                team1Name: finalTeam1Name,
+                team2Id: finalTeam2Id,
+                team2Name: finalTeam2Name,
+              };
+            }
+            return m;
+          });
+          onTournamentUpdate({
+            ...tournament,
+            matches: updatedMatches,
+          });
+        }
+      }
+    }
+  }, [tournament, onTournamentUpdate]);
 
   useEffect(() => {
     // Recover any lost match data from localStorage
@@ -1088,29 +1211,60 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
     }
 
     // Progress winners/losers through playoffs
-    if (thisMatch.round === 'qualifier1' && q1 && finalMatch && q2 && thisMatch.winnerTeamId && thisMatch.loserTeamId) {
-      // Q1 winner to Final, loser to Qualifier 2
-      finalMatch.team1Id = thisMatch.winnerTeamId; 
-      finalMatch.team1Name = tournament.teams.find(t => t.id === thisMatch.winnerTeamId)?.name || 'TBD';
-      q2.team2Id = thisMatch.loserTeamId; 
-      q2.team2Name = tournament.teams.find(t => t.id === thisMatch.loserTeamId)?.name || 'TBD';
+    const finishedEliminator = updatedMatches.find(m => m.round === 'eliminator' && m.status === 'finished');
+    const finishedQ1 = updatedMatches.find(m => m.round === 'qualifier1' && m.status === 'finished');
+    const finishedQ2 = updatedMatches.find(m => m.round === 'qualifier2' && m.status === 'finished');
+
+    // Update Qualifier 2 participants
+    if (q2) {
+      if (finishedEliminator?.winnerTeamId) {
+        q2.team1Id = finishedEliminator.winnerTeamId;
+        q2.team1Name = tournament.teams.find(t => t.id === finishedEliminator.winnerTeamId)?.name || 'TBD';
+      }
+      if (finishedQ1?.loserTeamId) {
+        q2.team2Id = finishedQ1.loserTeamId;
+        q2.team2Name = tournament.teams.find(t => t.id === finishedQ1.loserTeamId)?.name || 'TBD';
+      }
     }
 
-    if (thisMatch.round === 'eliminator' && elim && q2 && thisMatch.winnerTeamId) {
-      // Eliminator winner to Qualifier 2
-      q2.team1Id = thisMatch.winnerTeamId; 
-      q2.team1Name = tournament.teams.find(t => t.id === thisMatch.winnerTeamId)?.name || 'TBD';
+    // Update Final participants
+    if (finalMatch) {
+      if (finishedQ1?.winnerTeamId) {
+        finalMatch.team1Id = finishedQ1.winnerTeamId;
+        finalMatch.team1Name = tournament.teams.find(t => t.id === finishedQ1.winnerTeamId)?.name || 'TBD';
+      }
+      if (finishedQ2?.winnerTeamId) {
+        finalMatch.team2Id = finishedQ2.winnerTeamId;
+        finalMatch.team2Name = tournament.teams.find(t => t.id === finishedQ2.winnerTeamId)?.name || 'TBD';
+      }
     }
 
-    if (thisMatch.round === 'qualifier2' && q2 && finalMatch && thisMatch.winnerTeamId) {
-      // Qualifier 2 winner to Final (second slot)
-      finalMatch.team2Id = thisMatch.winnerTeamId; 
-      finalMatch.team2Name = tournament.teams.find(t => t.id === thisMatch.winnerTeamId)?.name || 'TBD';
-    }
+    // --- PATCH: propagate updated playoff teams into updatedMatches ---
+    const updatedMatchesWithPlayoffTeams = updatedMatches.map(m => {
+      if (q2 && m.id === q2.id) {
+        return {
+          ...m,
+          team1Id: q2.team1Id,
+          team1Name: q2.team1Name,
+          team2Id: q2.team2Id,
+          team2Name: q2.team2Name,
+        };
+      }
+      if (finalMatch && m.id === finalMatch.id) {
+        return {
+          ...m,
+          team1Id: finalMatch.team1Id,
+          team1Name: finalMatch.team1Name,
+          team2Id: finalMatch.team2Id,
+          team2Name: finalMatch.team2Name,
+        };
+      }
+      return m;
+    });
 
     const updatedTournament = {
       ...tournament,
-      matches: updatedMatches,
+      matches: updatedMatchesWithPlayoffTeams,
       teams: updatedTeams,
       status: (completedGroupMatches.length === groupMatches.length ? 'active' : 'draft') as 'draft' | 'active' | 'completed',
     };
@@ -1197,41 +1351,7 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
   const lastMatchFantasy = lastFinished ? computeFantasyPointsForMatch(lastFinished.matchData as Match) : [];
   const tournamentFantasy = computeFantasyPointsForTournament(tournament.matches);
 
-  const autoSaveMatch = (matchData: Match) => {
-    if (!matchData || !currentTournamentMatchId) return;
-    
-    // Save to localStorage as backup
-    const matchBackup = {
-      tournamentId: tournament.id,
-      matchId: currentTournamentMatchId,
-      matchData: matchData,
-      timestamp: new Date().toISOString(),
-    };
-    
-    localStorage.setItem(`match_backup_${tournament.id}_${currentTournamentMatchId}`, JSON.stringify(matchBackup));
-    
-    // Update tournament match data
-    const updatedMatches = tournament.matches.map(m => 
-      m.id === currentTournamentMatchId 
-        ? { ...m, matchData: matchData }
-        : m
-    );
-    
-    const updatedTournament = {
-      ...tournament,
-      matches: updatedMatches,
-    };
-    
-    // Update local state immediately (don't wait for API)
-    onTournamentUpdate(updatedTournament);
-
-    // Persist to backend
-    fetch(`/api/tournaments/${tournament.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ matches: updatedMatches }),
-    }).catch(error => console.error('Failed to auto-save match to backend:', error));
-  };
+  // (moved above)
 
   const recoverLostMatchData = () => {
     const keys = Object.keys(localStorage);
@@ -1950,7 +2070,7 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
           </div>
           
           {/* Top Partnerships Award */}
-          {topPartnerships.length > 0 && (
+        {topPartnerships.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -1959,36 +2079,379 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
                 </CardTitle>
               </CardHeader>
               <CardContent>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "16px",
+                  }}
+                >
+                  {topPartnerships.map((partnership, index) => {
+                    const player1Name = partnership.player1Name;
+                    const player2Name = partnership.player2Name;
+                    const player1Runs = partnership.player1Runs;
+                    const player2Runs = partnership.player2Runs;
+                    const runs = partnership.runs;
+                    const teamName = partnership.teamName;
+                    const matchNumber = partnership.matchNumber;
+                    const player1Percentage = (player1Runs / runs) * 100;
+                    const player2Percentage = (player2Runs / runs) * 100;
+ 
+                    return (
+                      <div
+                        key={index}
+                        style={{
+                          position: "relative",
+                          background:
+                            "linear-gradient(135deg, #f9fafb, #ffffff)",
+                          borderRadius: "12px",
+                          border: "1px solid #e5e7eb",
+                          boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
+                          transition: "all 0.5s ease",
+                          overflow: "hidden",
+                          padding: "24px",
+                        }}
+                        onMouseEnter={(e) =>
+                          (e.currentTarget.style.transform = "scale(1.02)")
+                        }
+                        onMouseLeave={(e) =>
+                          (e.currentTarget.style.transform = "scale(1)")
+                        }
+                      >
+                        {/* Header */}
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            marginBottom: "20px",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "12px",
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "center",
+                                alignItems: "center",
+                                width: "40px",
+                                height: "40px",
+                                borderRadius: "50%",
+                                background:
+                                  "linear-gradient(135deg, #16a34a, #22c55e)",
+                                boxShadow: "0 2px 6px rgba(0,0,0,0.12)",
+                              }}
+                            >
+                              <Trophy
+                                style={{
+                                  width: "20px",
+                                  height: "20px",
+                                  color: "#fff",
+                                }}
+                              />
+                            </div>
+                            <div
+                              style={{
+                                background: "rgba(255, 215, 0, 0.1)",
+                                border: "1px solid rgba(255, 215, 0, 0.2)",
+                                padding: "4px 12px",
+                                borderRadius: "9999px",
+                              }}
+                            >
+                              <span
+                                style={{
+                                  fontSize: "14px",
+                                  fontWeight: "bold",
+                                  color: "#d97706",
+                                }}
+                              >
+                                #{index + 1} Partnership
+                              </span>
+                            </div>
+                          </div>
+ 
+                          <div style={{ textAlign: "right" }}>
+                            <div
+                              style={{
+                                fontSize: "12px",
+                                color: "#6b7280",
+                                marginBottom: "2px",
+                              }}
+                            >
+                              Match
+                            </div>
+                            <div
+                              style={{
+                                fontSize: "14px",
+                                fontWeight: "600",
+                                color: "#111827",
+                              }}
+                            >
+                              #{matchNumber}
+                            </div>
+                          </div>
+                        </div>
+ 
+                        {/* Runs + Team */}
+                        <div
+                          style={{ textAlign: "center", marginBottom: "20px" }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "center",
+                              alignItems: "center",
+                              gap: "8px",
+                              marginBottom: "8px",
+                            }}
+                          >
+                            <Target
+                              style={{
+                                width: "20px",
+                                height: "20px",
+                                color: "#a855f7",
+                              }}
+                            />
+                            <h3
+                              style={{
+                                fontSize: "28px",
+                                fontWeight: "bold",
+                              }}
+                            >
+                              {runs}
+                            </h3>
+                            <span
+                              style={{ fontSize: "16px", color: "#6b7280" }}
+                            >
+                              runs
+                            </span>
+                          </div>
+                          <p
+                            style={{
+                              fontSize: "24px",
+                            }}
+                            className="font-bold"
+                          >
+                            {teamName}
+                          </p>
+                        </div>
+ 
+                        {/* Progress Bar */}
+                        <div style={{ marginBottom: "16px" }}>
+                          <div
+                            style={{
+                              width: "100%",
+                              height: "12px",
+                              background: "#f3f4f6",
+                              borderRadius: "9999px",
+                              border: "1px solid #e5e7eb",
+                              overflow: "hidden",
+                              display: "flex",
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: `${player1Percentage}%`,
+                                background:
+                                  "linear-gradient(90deg, #f97316, #fb923c)",
+                                transition: "width 1s ease",
+                              }}
+                            />
+                            <div
+                              style={{
+                                width: `${player2Percentage}%`,
+                                background:
+                                  "linear-gradient(90deg, #6366f1, #818cf8)",
+                                transition: "width 1s ease",
+                              }}
+                            />
+                          </div>
+                        </div>
+ 
+                        {/* Player Stats */}
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                          }}
+                        >
+                          {/* Player 1 */}
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "12px",
+                              flex: 1,
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: "12px",
+                                height: "12px",
+                                borderRadius: "50%",
+                                background: "#f97316",
+                              }}
+                            />
+                            <div>
+                              <p
+                                style={{
+                                  fontWeight: "600",
+                                  fontSize: "14px",
+                                  color: "#111827",
+                                }}
+                              >
+                                {player1Name}
+                              </p>
+                              <p style={{ fontSize: "12px", color: "#6b7280" }}>
+                                {player1Runs} runs (
+                                {player1Percentage.toFixed(1)}%)
+                              </p>
+                            </div>
+                          </div>
+ 
+                          {/* VS Divider */}
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "6px",
+                              padding: "4px 10px",
+                              borderRadius: "9999px",
+                              background: "#f9fafb",
+                              border: "1px solid #e5e7eb",
+                            }}
+                          >
+                            <Users
+                              style={{
+                                width: "14px",
+                                height: "14px",
+                                color: "#d97706",
+                              }}
+                            />
+                            <span
+                              style={{
+                                fontSize: "12px",
+                                fontWeight: "500",
+                                color: "#d97706",
+                              }}
+                            >
+                              VS
+                            </span>
+                          </div>
+ 
+                          {/* Player 2 */}
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "12px",
+                              flex: 1,
+                              justifyContent: "flex-end",
+                              textAlign: "right",
+                            }}
+                          >
+                            <div>
+                              <p
+                                style={{
+                                  fontWeight: "600",
+                                  fontSize: "14px",
+                                  color: "#111827",
+                                }}
+                              >
+                                {player2Name}
+                              </p>
+                              <p style={{ fontSize: "12px", color: "#6b7280" }}>
+                                {player2Runs} runs (
+                                {player2Percentage.toFixed(1)}%)
+                              </p>
+                            </div>
+                            <div
+                              style={{
+                                width: "12px",
+                                height: "12px",
+                                borderRadius: "50%",
+                                background: "#6366f1",
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+ 
                 <div className="space-y-4">
-                  {topPartnerships.map((partnership, index) => (
-                    <div key={index} className="p-3 bg-green-50 rounded-md border border-green-200">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-bold text-green-600 bg-green-100 px-2 py-1 rounded-full">
-                          #{index + 1}
-                        </span>
-                        <span className="text-sm text-muted-foreground">
-                          Match #{partnership.matchNumber}
-                        </span>
-                      </div>
-                      
-                      <div className="flex items-center justify-center gap-3 mb-2">
-                        <div className="text-center">
-                          <p className="font-semibold text-sm">{partnership.player1Name}</p>
-                          <p className="text-xs text-muted-foreground">Player 1</p>
+                  {topPartnerships.map((partnership, index) => {
+                    const player1Runs = partnership.player1Runs;
+                    const player2Runs = partnership.player2Runs;
+                    const totalRuns = partnership.runs;
+                    console.log(partnership, "topPartnerships");
+                    const player1Percentage = (player1Runs / totalRuns) * 100;
+                    const player2Percentage = (player2Runs / totalRuns) * 100;
+ 
+                    return (
+                      <div
+                        key={index}
+                        className="p-3 bg-green-50 rounded-md border border-green-200"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-bold text-green-600 bg-green-100 px-2 py-1 rounded-full">
+                            #{index + 1}
+                          </span>
+                          <span className="text-sm text-muted-foreground">
+                            Match #{partnership.matchNumber}
+                          </span>
                         </div>
-                        <div className="text-lg font-bold text-green-600">+</div>
-                        <div className="text-center">
-                          <p className="font-semibold text-sm">{partnership.player2Name}</p>
-                          <p className="text-xs text-muted-foreground">Player 2</p>
+ 
+                        <div className="text-center mb-2">
+                          <p className="font-bold text-xl text-green-600">
+                            {partnership.runs} runs
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {partnership.teamName}
+                          </p>
+                        </div>
+ 
+                        <div className="w-full bg-gray-200 rounded-full h-4 dark:bg-gray-700 overflow-hidden flex">
+                          <div
+                            className="bg-orange-500 h-4"
+                            style={{ width: `${player1Percentage}%` }}
+                          ></div>
+                          <div
+                            className="bg-purple-500 h-4"
+                            style={{ width: `${player2Percentage}%` }}
+                          ></div>
+                        </div>
+ 
+                        <div className="flex justify-between mt-1 text-xs">
+                          <div className="text-left">
+                            <p className="font-semibold">
+                              {partnership.player1Name}
+                            </p>
+                            <p>
+                              {player1Runs} runs ({player1Percentage.toFixed(1)}
+                              %)
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-semibold">
+                              {partnership.player2Name}
+                            </p>
+                            <p>
+                              {player2Runs} runs ({player2Percentage.toFixed(1)}
+                              %)
+                            </p>
+                          </div>
                         </div>
                       </div>
-                      
-                      <div className="text-center">
-                        <p className="font-bold text-xl text-green-600">{partnership.runs} runs</p>
-                        <p className="text-sm text-muted-foreground">{partnership.teamName}</p>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </CardContent>
             </Card>
@@ -2359,8 +2822,7 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
                                      match.round === 'qualifier2' ? 'Qualifier 2' :
                                      match.round === 'final' ? 'Final' : match.round}
                                   </h4>
-                                  
-                                  {match.team1Name === 'TBD' ? (
+                                  {!match.team1Id || !match.team2Id ? (
                                     <div className="text-sm text-muted-foreground">
                                       Teams TBD
                                     </div>
@@ -2369,13 +2831,13 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
                                       {/* Team 1 */}
                                       <div className="flex flex-col items-center">
                                         {team1?.logo ? (
-                                          <img src={team1.logo} alt={`${team1.name} logo`} className="w-12 h-12 mb-1" />
+                                          <img src={team1.logo} alt={`${match.team1Name} logo`} className="w-12 h-12 mb-1" />
                                         ) : (
                                           <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center text-lg font-bold mb-1">
-                                            {team1?.name.charAt(0).toUpperCase()}
+                                            {match.team1Name?.charAt(0).toUpperCase()}
                                           </div>
                                         )}
-                                        <span className="text-sm font-medium">{team1?.name}</span>
+                                        <span className="text-sm font-medium">{match.team1Name}</span>
                                       </div>
                                       
                                       {/* VS */}
@@ -2384,13 +2846,13 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
                                       {/* Team 2 */}
                                       <div className="flex flex-col items-center">
                                         {team2?.logo ? (
-                                          <img src={team2.logo} alt={`${team2.name} logo`} className="w-12 h-12 mb-1" />
+                                          <img src={team2.logo} alt={`${match.team2Name} logo`} className="w-12 h-12 mb-1" />
                                         ) : (
                                           <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center text-lg font-bold mb-1">
-                                            {team2?.name.charAt(0).toUpperCase()}
+                                            {match.team2Name?.charAt(0).toUpperCase()}
                                           </div>
                                         )}
-                                        <span className="text-sm font-medium">{team2?.name}</span>
+                                        <span className="text-sm font-medium">{match.team2Name}</span>
                                       </div>
                                     </div>
                                   )}
@@ -2473,27 +2935,53 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
         </TabsContent>
 
         <TabsContent value="statistics">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Player Statistics by Team</CardTitle>
-                <Button 
-                  onClick={() => {
-                    console.log('Manual refresh of tournament player stats');
-                    calculatePlayerStats();
-                  }}
-                  variant="outline"
-                  size="sm"
-                >
-                  Refresh Stats
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {playerStats.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-muted-foreground mb-2">No player statistics available</p>
-                  <p className="text-sm text-muted-foreground">
+          <div className="space-y-6">
+            {/* Header with overall stats */}
+            <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-0 shadow-lg">
+              <CardHeader className="text-center pb-4">
+                <CardTitle className="text-2xl font-bold text-gray-800 flex items-center justify-center gap-3">
+                  <BarChart className="h-8 w-8 text-blue-600" />
+                  Tournament Statistics Hub
+                </CardTitle>
+                <CardDescription className="text-lg text-gray-600">
+                  Comprehensive player performance analysis across all teams
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="text-center p-4 bg-white rounded-lg shadow-sm">
+                    <div className="text-3xl font-bold text-blue-600">{playerStats.length}</div>
+                    <div className="text-sm text-gray-600">Active Players</div>
+                  </div>
+                  <div className="text-center p-4 bg-white rounded-lg shadow-sm">
+                    <div className="text-3xl font-bold text-green-600">
+                      {playerStats.filter(p => p.runs > 0).length}
+                    </div>
+                    <div className="text-sm text-gray-600">Batsmen</div>
+                  </div>
+                  <div className="text-center p-4 bg-white rounded-lg shadow-sm">
+                    <div className="text-3xl font-bold text-purple-600">
+                      {playerStats.filter(p => p.wickets > 0).length}
+                    </div>
+                    <div className="text-sm text-gray-600">Bowlers</div>
+                  </div>
+                  <div className="text-center p-4 bg-white rounded-lg shadow-sm">
+                    <div className="text-3xl font-bold text-orange-600">
+                      {tournament.teams.length}
+                    </div>
+                    <div className="text-sm text-gray-600">Teams</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Team Statistics Cards */}
+            {playerStats.length === 0 ? (
+              <Card className="text-center py-12">
+                <div className="space-y-4">
+                  <BarChart className="h-16 w-16 text-muted-foreground mx-auto" />
+                  <h3 className="text-xl font-semibold text-muted-foreground">No Statistics Available</h3>
+                  <p className="text-muted-foreground max-w-md mx-auto">
                     Player statistics will appear here once matches are completed and data is processed.
                   </p>
                   <Button 
@@ -2501,103 +2989,183 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
                     variant="outline" 
                     className="mt-4"
                   >
-                    Calculate Stats
+                    Calculate Statistics
                   </Button>
                 </div>
-              ) : (
-                <Accordion type="single" collapsible className="w-full">
-                  {tournament.teams.map(team => {
-                    const teamPlayers = playerStats.filter(p => p.teamId === team.id && p.matches > 0);
-                    return (
-                      <AccordionItem value={`team-${team.id}`} key={team.id}>
-                        <AccordionTrigger>
-                          <div className="flex items-center gap-3">
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {tournament.teams.map(team => {
+                  const teamPlayers = playerStats.filter(p => p.teamId === team.id && p.matches > 0);
+                  const battingPlayers = teamPlayers.filter(p => p.runs > 0).sort((a, b) => b.runs - a.runs);
+                  const bowlingPlayers = teamPlayers.filter(p => p.wickets > 0).sort((a, b) => b.wickets - a.wickets);
+                  
+                  if (teamPlayers.length === 0) return null;
+
+                  return (
+                    <Card key={team.id} className="group hover:shadow-xl transition-all duration-300 border-2 hover:border-primary/20 overflow-hidden">
+                      <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100 border-b">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4">
                             {team.logo ? (
-                              <img src={team.logo} alt={`${team.name} logo`} className="w-8 h-8 rounded" />
+                              <img src={team.logo} alt={`${team.name} logo`} className="w-12 h-12 rounded-lg shadow-sm" />
                             ) : (
-                              <div className="w-8 h-8 bg-muted rounded-full flex items-center justify-center text-sm font-bold">
+                              <div className="w-12 h-12 bg-gradient-to-br from-primary to-primary/70 rounded-lg flex items-center justify-center text-white font-bold text-lg shadow-sm">
                                 {team.name.charAt(0).toUpperCase()}
                               </div>
                             )}
-                            <span className="font-semibold">{team.name}</span>
-                            <Badge variant="secondary" className="ml-auto">
-                              {teamPlayers.length} players
-                            </Badge>
+                            <div>
+                              <CardTitle className="text-xl font-bold text-gray-800 group-hover:text-primary transition-colors">
+                                {team.name}
+                              </CardTitle>
+                              <CardDescription className="text-gray-600">
+                                {teamPlayers.length} active players
+                              </CardDescription>
+                            </div>
                           </div>
-                        </AccordionTrigger>
-                        <AccordionContent>
-                          {teamPlayers.length === 0 ? (
-                            <p className="text-center py-4 text-muted-foreground">
-                              No players from this team have played matches yet.
-                            </p>
-                          ) : (
-                            <div className="space-y-4">
-                              <div>
-                                <h4 className="font-semibold mb-2">Batting Stats</h4>
-                                <Table>
-                                  <TableHeader>
-                                    <TableRow>
-                                      <TableHead>Player</TableHead>
-                                      <TableHead>Matches</TableHead>
-                                      <TableHead>Runs</TableHead>
-                                      <TableHead>Avg</TableHead>
-                                      <TableHead>SR</TableHead>
-                                    </TableRow>
-                                  </TableHeader>
-                                  <TableBody>
-                                    {teamPlayers
-                                      .filter(p => p.runs > 0)
-                                      .sort((a, b) => b.runs - a.runs)
-                                      .map(player => (
-                                        <TableRow key={player.playerId}>
-                                          <TableCell className="font-medium">{player.playerName}</TableCell>
-                                          <TableCell>{player.matches}</TableCell>
-                                          <TableCell>{player.runs}</TableCell>
-                                          <TableCell>{(player.runs / (player.matches || 1)).toFixed(2)}</TableCell>
-                                          <TableCell>{player.strikeRate.toFixed(2)}</TableCell>
-                                        </TableRow>
-                                      ))}
-                                  </TableBody>
-                                </Table>
+                          <Badge variant="secondary" className="text-sm px-3 py-1">
+                            {teamPlayers.length} players
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                      
+                      <CardContent className="p-6 space-y-6">
+                        {/* Batting Statistics */}
+                        {battingPlayers.length > 0 && (
+                          <div className="space-y-4">
+                            <div className="flex items-center gap-2">
+                              <Target className="h-5 w-5 text-green-600" />
+                              <h4 className="font-semibold text-lg text-gray-800">Batting Performance</h4>
+                            </div>
+                            
+                            {/* Top Batsman Highlight */}
+                            {battingPlayers[0] && (
+                              <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-4 rounded-lg border border-green-200">
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <div className="font-semibold text-green-800">🏆 Top Scorer</div>
+                                    <div className="text-2xl font-bold text-green-700">{battingPlayers[0].playerName}</div>
+                                    <div className="text-sm text-green-600">{battingPlayers[0].runs} runs in {battingPlayers[0].matches} matches</div>
+                                  </div>
+                                  <div className="text-right">
+                                    <div className="text-3xl font-bold text-green-600">{battingPlayers[0].runs}</div>
+                                    <div className="text-sm text-green-600">runs</div>
+                                  </div>
+                                </div>
                               </div>
-                              <div>
-                                <h4 className="font-semibold mb-2">Bowling Stats</h4>
-                                <Table>
-                                  <TableHeader>
-                                    <TableRow>
-                                      <TableHead>Player</TableHead>
-                                      <TableHead>Matches</TableHead>
-                                      <TableHead>Wickets</TableHead>
-                                      <TableHead>Avg</TableHead>
-                                      <TableHead>Econ</TableHead>
-                                    </TableRow>
-                                  </TableHeader>
-                                  <TableBody>
-                                    {teamPlayers
-                                      .filter(p => p.wickets > 0)
-                                      .sort((a, b) => b.wickets - a.wickets)
-                                      .map(player => (
-                                        <TableRow key={player.playerId}>
-                                          <TableCell className="font-medium">{player.playerName}</TableCell>
-                                          <TableCell>{player.matches}</TableCell>
-                                          <TableCell>{player.wickets}</TableCell>
-                                          <TableCell>{player.average.toFixed(2)}</TableCell>
-                                          <TableCell>{player.economyRate.toFixed(2)}</TableCell>
-                                        </TableRow>
-                                      ))}
-                                  </TableBody>
-                                </Table>
+                            )}
+                            
+                            {/* Batting Stats Table */}
+                            <div className="bg-white rounded-lg border overflow-hidden">
+                              <div className="bg-gray-50 px-4 py-2 border-b">
+                                <div className="grid grid-cols-5 gap-4 text-sm font-medium text-gray-700">
+                                  <div>Player</div>
+                                  <div className="text-center">Matches</div>
+                                  <div className="text-center">Runs</div>
+                                  <div className="text-center">Average</div>
+                                  <div className="text-center">Strike Rate</div>
+                                </div>
+                              </div>
+                              <div className="divide-y">
+                                {battingPlayers.slice(0, 5).map((player, index) => (
+                                  <div key={player.playerId} className="grid grid-cols-5 gap-4 px-4 py-3 hover:bg-gray-50 transition-colors">
+                                    <div className="font-medium text-gray-900 flex items-center gap-2">
+                                      {index === 0 && <span className="text-yellow-500">🥇</span>}
+                                      {index === 1 && <span className="text-gray-400">🥈</span>}
+                                      {index === 2 && <span className="text-amber-600">🥉</span>}
+                                      {player.playerName}
+                                    </div>
+                                    <div className="text-center text-gray-600">{player.matches}</div>
+                                    <div className="text-center font-semibold text-gray-900">{player.runs}</div>
+                                    <div className="text-center text-gray-600">{(player.runs / (player.matches || 1)).toFixed(1)}</div>
+                                    <div className="text-center text-gray-600">{player.strikeRate.toFixed(1)}</div>
+                                  </div>
+                                ))}
                               </div>
                             </div>
-                          )}
-                        </AccordionContent>
-                      </AccordionItem>
-                    );
-                  })}
-                </Accordion>
-              )}
-            </CardContent>
-          </Card>
+                          </div>
+                        )}
+
+                        {/* Bowling Statistics */}
+                        {bowlingPlayers.length > 0 && (
+                          <div className="space-y-4">
+                            <div className="flex items-center gap-2">
+                              <Zap className="h-5 w-5 text-purple-600" />
+                              <h4 className="font-semibold text-lg text-gray-800">Bowling Performance</h4>
+                            </div>
+                            
+                            {/* Top Bowler Highlight */}
+                            {bowlingPlayers[0] && (
+                              <div className="bg-gradient-to-r from-purple-50 to-violet-50 p-4 rounded-lg border border-purple-200">
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <div className="font-semibold text-purple-800">🎯 Top Wicket Taker</div>
+                                    <div className="text-2xl font-bold text-purple-700">{bowlingPlayers[0].playerName}</div>
+                                    <div className="text-sm text-purple-600">{bowlingPlayers[0].wickets} wickets in {bowlingPlayers[0].matches} matches</div>
+                                  </div>
+                                  <div className="text-right">
+                                    <div className="text-3xl font-bold text-purple-600">{bowlingPlayers[0].wickets}</div>
+                                    <div className="text-sm text-purple-600">wickets</div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* Bowling Stats Table */}
+                            <div className="bg-white rounded-lg border overflow-hidden">
+                              <div className="bg-gray-50 px-4 py-2 border-b">
+                                <div className="grid grid-cols-5 gap-4 text-sm font-medium text-gray-700">
+                                  <div>Player</div>
+                                  <div className="text-center">Matches</div>
+                                  <div className="text-center">Wickets</div>
+                                  <div className="text-center">Average</div>
+                                  <div className="text-center">Economy</div>
+                                </div>
+                              </div>
+                              <div className="divide-y">
+                                {bowlingPlayers.slice(0, 5).map((player, index) => (
+                                  <div key={player.playerId} className="grid grid-cols-5 gap-4 px-4 py-3 hover:bg-gray-50 transition-colors">
+                                    <div className="font-medium text-gray-900 flex items-center gap-2">
+                                      {index === 0 && <span className="text-yellow-500">🥇</span>}
+                                      {index === 1 && <span className="text-gray-400">🥈</span>}
+                                      {index === 2 && <span className="text-amber-600">🥉</span>}
+                                      {player.playerName}
+                                    </div>
+                                    <div className="text-center text-gray-600">{player.matches}</div>
+                                    <div className="text-center font-semibold text-gray-900">{player.wickets}</div>
+                                    <div className="text-center text-gray-600">{player.average.toFixed(1)}</div>
+                                    <div className="text-center text-gray-600">{player.economyRate.toFixed(1)}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Team Performance Summary */}
+                        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg border border-blue-200">
+                          <div className="grid grid-cols-2 gap-4 text-center">
+                            <div>
+                              <div className="text-2xl font-bold text-blue-600">
+                                {battingPlayers.reduce((sum, p) => sum + p.runs, 0)}
+                              </div>
+                              <div className="text-sm text-blue-600">Total Team Runs</div>
+                            </div>
+                            <div>
+                              <div className="text-2xl font-bold text-purple-600">
+                                {bowlingPlayers.reduce((sum, p) => sum + p.wickets, 0)}
+                              </div>
+                              <div className="text-sm text-purple-600">Total Team Wickets</div>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </TabsContent>
         <TabsContent value="history">
           <Card>

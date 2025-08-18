@@ -247,7 +247,7 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
           if (matchState.status !== 'finished') {
             const ballNum = `${matchState.innings[matchState.currentInnings - 1].overs}.${matchState.innings[matchState.currentInnings - 1].ballsThisOver}`;
             //await handleGenerateCommentary(matchState, ballDetails, ballNum);
-            await new Promise(resolve => setTimeout(resolve, 1500));
+            await new Promise(resolve => setTimeout(resolve, 500));
           }
         } else {
           break; // Stop processing if match state is invalid
