@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import type { Match, BallEvent, Team, BallDetails, GenerateMatchCommentaryInput, FielderPlacement } from "@/types"
-import { processBall, undoLastBall, updateFieldPlacements, getMatchSituation, getPowerplayOvers, handleRainInterruption } from "@/lib/cricket-logic"
+import { processBall, undoLastBall, updateFieldPlacements, getMatchSituation, getPowerplayOvers, handleRainInterruption, selectNextBatsman } from "@/lib/cricket-logic"
 import { generateMatchCommentary } from "@/ai/flows/generate-match-commentary";
 import { Button } from "../components/ui/button"
 import { BallOutcome } from "@/simulation/types";
@@ -19,7 +19,7 @@ import { Undo, Flame, PlusCircle, Users, Bot, ChevronsRight, Target } from "luci
 import ManagePlayersDialog from "./manage-players-dialog";
 import { Label } from "./ui/label";
 import { Slider } from "./ui/slider";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "./ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose, DialogDescription } from "./ui/dialog";
 import FieldEditor from "./field-editor"; // Assuming you'll create this component
 
 
@@ -41,6 +41,7 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
   const [wicketTaker, setWicketTaker] = useState<{type: string, fielderId: number | null}>({type: '', fielderId: null});
   const [isFieldEditorOpen, setIsFieldEditorOpen] = useState(false);
   const [aiAggression, setAiAggression] = useState(1.0);
+  const [showNextBatsmanSelector, setShowNextBatsmanSelector] = useState(false);
 
   const currentInnings = match.innings[match.currentInnings - 1]
   const battingTeam = currentInnings.battingTeam
@@ -68,6 +69,11 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
 
     const newMatchState = processBall(match, { event, runs, extras, wicketType, fielderId });
     if(newMatchState) {
+        // Check if we need to select next batsman after wicket
+        if (event === 'w' && newMatchState.innings[newMatchState.currentInnings - 1].batsmanOnStrike === -1) {
+            setShowNextBatsmanSelector(true);
+        }
+        
         // Check for rain interruption after manual ball scoring
         if (newMatchState.rainSimulation?.willRain) {
           const currentOver = Math.floor(newMatchState.innings[newMatchState.currentInnings - 1].overs);
@@ -125,6 +131,17 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
 
     newCurrentInnings.currentBowler = bowlerId;
     setMatch(newMatch);
+  }
+
+  const handleNextBatsmanSelection = (batsmanId: number) => {
+    const newMatchState = selectNextBatsman(match, batsmanId);
+    if (newMatchState) {
+      setMatch(newMatchState);
+      setShowNextBatsmanSelector(false);
+      toast({ title: "Next Batsman Selected", description: "The next batsman has been set." });
+    } else {
+      toast({ variant: "destructive", title: "Selection Failed", description: "Unable to select this batsman." });
+    }
   }
 
   const getMatchSummaryForAI = (matchState: Match): string => {
@@ -217,6 +234,13 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
 
         if (processedMatchState) {
           matchState = processedMatchState;
+          // If a wicket fell and next batsman is required, prompt and pause the over processing
+          const innings = matchState.innings[matchState.currentInnings - 1];
+          if (ballDetails.event === 'w' && innings.batsmanOnStrike === -1) {
+            setMatch(matchState);
+            setShowNextBatsmanSelector(true);
+            break; // wait for user to select next batsman
+          }
           
           // Check for rain interruption after each ball
           if (matchState.rainSimulation?.willRain) {
@@ -418,6 +442,41 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
                        {/* Pass the handleSaveFieldPlacements function to FieldEditor */}
                        <FieldEditor match={match} setMatch={setMatch} onSave={handleSaveFieldPlacements}/>
                        {/* Remove DialogFooter from here as it's now in FieldEditor */}
+                  </DialogContent>
+              </Dialog>
+
+              {/* Next Batsman Selection Dialog */}
+              <Dialog open={showNextBatsmanSelector} onOpenChange={setShowNextBatsmanSelector}>
+                  <DialogContent className="sm:max-w-[500px]">
+                      <DialogHeader>
+                          <DialogTitle>Select Next Batsman</DialogTitle>
+                          <DialogDescription>
+                              A wicket has fallen. Please select the next batsman to come in.
+                          </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-3 max-h-96 overflow-y-auto">
+                          {battingTeam.players
+                              .filter((p: Player) => 
+                                  p.batting.status === 'not out' && 
+                                  p.id !== currentInnings.batsmanNonStrike &&
+                                  (!p.isSubstitute || p.isImpactPlayer)
+                              )
+                              .map((player: Player) => (
+                                  <Button
+                                      key={player.id}
+                                      onClick={() => handleNextBatsmanSelection(player.id)}
+                                      variant="outline"
+                                      className="w-full justify-start h-auto p-3"
+                                  >
+                                      <div className="text-left">
+                                          <div className="font-semibold">{player.name}</div>
+                                          <div className="text-sm text-muted-foreground">
+                                              {player.role || 'Player'} • Rating: {player.rating || 'N/A'}
+                                          </div>
+                                      </div>
+                                  </Button>
+                              ))}
+                      </div>
                   </DialogContent>
               </Dialog>
 

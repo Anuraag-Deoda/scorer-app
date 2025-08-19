@@ -34,12 +34,20 @@ export default function TournamentCreationForm({ onTournamentCreated, onCancel }
   const [currentTeamHomeGround, setCurrentTeamHomeGround] = useState('');
   const [selectedPlayers, setSelectedPlayers] = useState<number[]>([]);
   const [tournamentType, setTournamentType] = useState<TournamentType>('round-robin-3');
+  const [useAuction, setUseAuction] = useState(false);
+  // Pre-retention in auction mode
+  const [captainId, setCaptainId] = useState<number | null>(null);
+  const [retainedId, setRetainedId] = useState<number | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const { toast } = useToast();
 
   // Get available players (not selected by any team)
   const getAvailablePlayers = () => {
-    const selectedPlayerIds = teams.flatMap(team => team.players);
+    const selectedPlayerIds = teams.flatMap(team => [
+      ...team.players,
+      ...(team.retainedPlayerIds || []),
+      ...(team.captainId ? [team.captainId] : []),
+    ]);
     return DEFAULT_PLAYERS.filter(player => !selectedPlayerIds.includes(player.id));
   };
 
@@ -54,13 +62,13 @@ export default function TournamentCreationForm({ onTournamentCreated, onCancel }
       return;
     }
 
-    if (selectedPlayers.length === 0) {
+    if (!useAuction && selectedPlayers.length === 0) {
       toast({ variant: "destructive", title: "Error", description: "Please select at least one player for the team." });
       return;
     }
 
-    if (selectedPlayers.length > 13) {
-      toast({ variant: "destructive", title: "Error", description: "A team can have maximum 13 players." });
+    if (!useAuction && selectedPlayers.length > 15) {
+      toast({ variant: "destructive", title: "Error", description: "A team can have maximum 15 players." });
       return;
     }
 
@@ -69,7 +77,12 @@ export default function TournamentCreationForm({ onTournamentCreated, onCancel }
       name: currentTeamName.trim(),
       logo: currentTeamLogoPreview,
       homeGround: currentTeamHomeGround.trim(),
-      players: selectedPlayers,
+      players: useAuction ? [] : selectedPlayers, // Empty array for auction mode
+      // In auction mode we store pre-retentions
+      ...(useAuction ? {
+        captainId: captainId || undefined,
+        retainedPlayerIds: retainedId ? [retainedId] : [],
+      } : {}),
       points: 0,
       matchesPlayed: 0,
       matchesWon: 0,
@@ -88,6 +101,8 @@ export default function TournamentCreationForm({ onTournamentCreated, onCancel }
     setCurrentTeamLogoPreview('');
     setCurrentTeamHomeGround('');
     setSelectedPlayers([]);
+    setCaptainId(null);
+    setRetainedId(null);
 
     toast({ title: "Team Added", description: `${newTeam.name} has been added to the tournament.` });
   };
@@ -109,6 +124,15 @@ export default function TournamentCreationForm({ onTournamentCreated, onCancel }
     if (teams.length < 2) {
       toast({ variant: "destructive", title: "Error", description: "Please add at least 2 teams to create a tournament." });
       return;
+    }
+
+    if (useAuction) {
+      // In auction mode, check if teams have no players
+      const teamsWithPlayers = teams.filter(team => team.players.length > 0);
+      if (teamsWithPlayers.length > 0) {
+        toast({ variant: "destructive", title: "Error", description: "In auction mode, teams should not have pre-selected players." });
+        return;
+      }
     }
 
     setIsCreating(true);
@@ -155,7 +179,7 @@ export default function TournamentCreationForm({ onTournamentCreated, onCancel }
         numberOfTeams: teams.length,
         teams,
         matches,
-        status: 'draft',
+        status: useAuction ? 'auction' : 'draft', // Set status to auction if using auction mode
         createdDate: new Date(),
         updatedDate: new Date(),
         settings: {
@@ -165,6 +189,7 @@ export default function TournamentCreationForm({ onTournamentCreated, onCancel }
           groupStageRounds: tournamentType === 'round-robin-3' ? 3 : tournamentType === 'round-robin-2' ? 2 : 1,
           topTeamsAdvance: Math.min(4, teams.length),
         },
+        useAuction, // Add auction flag to tournament
       };
 
       onTournamentCreated(tournament);
@@ -206,7 +231,9 @@ export default function TournamentCreationForm({ onTournamentCreated, onCancel }
       }
     } else {
       const rounds = tournamentType === 'round-robin-3' ? 3 : (tournamentType === 'round-robin-2' || tournamentType === 'ipl-style') ? 2 : 1;
+      const pairings: Array<{ team1: TournamentTeam; team2: TournamentTeam; round: number; venue: string }>[] = [];
       for (let r = 0; r < rounds; r++) {
+        const roundPairs: Array<{ team1: TournamentTeam; team2: TournamentTeam; round: number; venue: string }> = [];
         for (let i = 0; i < tournamentTeams.length; i++) {
           for (let j = i + 1; j < tournamentTeams.length; j++) {
             const team1 = tournamentTeams[i];
@@ -214,22 +241,47 @@ export default function TournamentCreationForm({ onTournamentCreated, onCancel }
             let venue = neutralVenue;
             if (r === 0) venue = team1.homeGround || neutralVenue;
             else if (r === 1) venue = team2.homeGround || neutralVenue;
-            
-            matches.push({
-              id: `match${matchNumber++}`,
-              tournamentId: '',
-              team1Id: team1.id,
-              team2Id: team2.id,
-              team1Name: team1.name,
-              team2Name: team2.name,
-              matchNumber: matchNumber - 1,
-              round: 'group',
-              status: 'pending',
-              venue,
-            });
+            roundPairs.push({ team1, team2, round: r, venue });
           }
         }
+        // Randomize order per round
+        for (let k = roundPairs.length - 1; k > 0; k--) {
+          const swap = Math.floor(Math.random() * (k + 1));
+          [roundPairs[k], roundPairs[swap]] = [roundPairs[swap], roundPairs[k]];
+        }
+        pairings.push(roundPairs);
       }
+
+      // Flatten pairings while attempting to avoid consecutive matches for the same team
+      const flat: typeof pairings[number] = pairings.flat();
+      const scheduled: typeof flat = [];
+      const lastPlayed = new Map<number, number>(); // teamId -> last index
+      flat.forEach(p => {
+        scheduled.push(p);
+      });
+      // Simple shuffle to reduce back-to-back occurrences
+      for (let i = 1; i < scheduled.length; i++) {
+        const a = scheduled[i - 1];
+        const b = scheduled[i];
+        if (a && b && (a.team1.id === b.team1.id || a.team1.id === b.team2.id || a.team2.id === b.team1.id || a.team2.id === b.team2.id)) {
+          const swapIndex = Math.min(i + 2, scheduled.length - 1);
+          [scheduled[i], scheduled[swapIndex]] = [scheduled[swapIndex], scheduled[i]];
+        }
+      }
+      scheduled.forEach(p => {
+        matches.push({
+          id: `match${matchNumber++}`,
+          tournamentId: '',
+          team1Id: p.team1.id,
+          team2Id: p.team2.id,
+          team1Name: p.team1.name,
+          team2Name: p.team2.name,
+          matchNumber: matchNumber - 1,
+          round: 'group',
+          status: 'pending',
+          venue: p.venue,
+        });
+      });
     }
 
     if (tournamentTeams.length >= 4 && (tournamentType === 'ipl-style' || tournamentType !== 'knockout')) {
@@ -369,12 +421,40 @@ export default function TournamentCreationForm({ onTournamentCreated, onCancel }
               {tournamentType === 'ipl-style' && 'Group stage followed by playoffs (Qualifier 1, Eliminator, Qualifier 2, Final)'}
             </p>
           </div>
+
+          {/* Auction Option */}
+          <div className="space-y-2">
+            <div className="flex items-center space-x-2">
+              <Checkbox 
+                id="use-auction" 
+                checked={useAuction} 
+                onCheckedChange={(checked) => setUseAuction(checked as boolean)} 
+              />
+              <Label htmlFor="use-auction" className="text-sm font-medium">
+                Use Auction System for Player Selection
+              </Label>
+            </div>
+            {useAuction && (
+              <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-md">
+                <p>• Each team will start with ₹100 purse</p>
+                <p>• Teams must bid on players to build their squad</p>
+                <p>• Teams need 13-15 players (minimum 13, maximum 15)</p>
+                <p>• Players will be auctioned one by one</p>
+                <p>• Auction ends when all teams reach their player limits</p>
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
           <CardTitle>Add Teams</CardTitle>
+          {useAuction && (
+            <p className="text-sm text-muted-foreground">
+              In auction mode, pick 2 players per team now: one captain and one retained. The rest go to auction.
+            </p>
+          )}
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -405,36 +485,85 @@ export default function TournamentCreationForm({ onTournamentCreated, onCancel }
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2 md:col-span-2">
-              <Label>Select Players (Max 13) - Available: {availablePlayers.length}</Label>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-56 overflow-y-auto border rounded-md p-4">
-                {availablePlayers.map(player => {
-                  const hist = histories[player.id]?.stats;
-                  return (
-                    <div key={player.id} className="flex items-center space-x-2">
-                      <Checkbox id={`player-${player.id}`} checked={selectedPlayers.includes(player.id)} onCheckedChange={() => handlePlayerToggle(player.id)} disabled={selectedPlayers.length >= 13 && !selectedPlayers.includes(player.id)} />
-                      <Label htmlFor={`player-${player.id}`} className="text-sm cursor-pointer">
-                        {player.name}
-                        {hist && (
-                          <span className="ml-1 text-[11px] text-muted-foreground">({hist.runs}R, {hist.wickets}W)</span>
-                        )}
-                      </Label>
-                    </div>
-                  );
-                })}
+          {!useAuction ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-2 md:col-span-2">
+                <Label>Select Players (Max 15) - Available: {availablePlayers.length}</Label>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-56 overflow-y-auto border rounded-md p-4">
+                  {availablePlayers.map(player => {
+                    const hist = histories[player.id]?.stats;
+                    return (
+                      <div key={player.id} className="flex items-center space-x-2">
+                        <Checkbox id={`player-${player.id}`} checked={selectedPlayers.includes(player.id)} onCheckedChange={() => handlePlayerToggle(player.id)} disabled={selectedPlayers.length >= 15 && !selectedPlayers.includes(player.id)} />
+                        <Label htmlFor={`player-${player.id}`} className="text-sm cursor-pointer">
+                          {player.name}
+                          {hist && (
+                            <span className="ml-1 text-[11px] text-muted-foreground">({hist.runs}R, {hist.wickets}W)</span>
+                          )}
+                        </Label>
+                      </div>
+                    );
+                  })}
+                </div>
+                {availablePlayers.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-4">All players have been selected by teams.</p>
+                )}
               </div>
-              {availablePlayers.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-4">All players have been selected by teams.</p>
-              )}
+              <div className="space-y-2">
+                <Label>Selected Players: {selectedPlayers.length}/15</Label>
+                <Button type="button" onClick={handleAddTeam} disabled={!currentTeamName.trim() || !currentTeamHomeGround.trim() || selectedPlayers.length === 0} className="w-full">
+                  Add Team
+                </Button>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Selected Players: {selectedPlayers.length}/13</Label>
-              <Button type="button" onClick={handleAddTeam} disabled={!currentTeamName.trim() || !currentTeamHomeGround.trim() || selectedPlayers.length === 0} className="w-full">
-                Add Team
-              </Button>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="md:col-span-2 space-y-2">
+                  <Label>Select Captain and one Retained Player (2 total)</Label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4 max-h-80 overflow-y-auto border rounded-md p-4">
+                    {getAvailablePlayers().map(player => {
+                      const hist = histories[player.id]?.stats;
+                      const runs = hist?.runs ?? 0;
+                      const wickets = hist?.wickets ?? 0;
+                      const strikeRate = hist?.strikeRate ?? 0;
+                      const economyRate = hist?.economyRate ?? 0;
+                      const matches = hist?.matches ?? 0;
+                      const derivedRating = Math.max(45, Math.min(95, Math.round(((runs / 5) + (hist?.fours ?? 0) + (hist?.sixes ?? 0) * 2 + (strikeRate / 2) + (wickets * 10) + (hist?.maidens ?? 0) * 2 + (economyRate > 0 ? 30 / economyRate : 0)) / 4)));
+                      const basePrice = Math.max(1, Math.round(derivedRating / 10));
+                      return (
+                        <div key={player.id} className="flex flex-col gap-2 p-3 rounded border">
+                          <div className="text-sm font-medium truncate">{player.name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {`M ${matches} • ${runs}R, ${wickets}W • SR ${Number(strikeRate).toFixed(1)} • Eco ${Number(economyRate).toFixed(2)} • Base ₹${basePrice}`}
+                          </div>
+                          <div className="flex gap-2 flex-wrap">
+                            <Button type="button" size="sm" className="h-8 px-2 text-xs" variant={captainId === player.id ? 'default' : 'outline'} onClick={() => setCaptainId(prev => prev === player.id ? null : player.id)} disabled={captainId !== null && captainId !== player.id}>
+                              Captain
+                            </Button>
+                            <Button type="button" size="sm" className="h-8 px-2 text-xs" variant={retainedId === player.id ? 'default' : 'outline'} onClick={() => setRetainedId(prev => prev === player.id ? null : player.id)} disabled={retainedId !== null && retainedId !== player.id}>
+                              Retain
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Selections</Label>
+                  <div className="space-y-1 text-sm">
+                    <div>Captain: {captainId ? DEFAULT_PLAYERS.find(p => p.id === captainId)?.name : 'None'}</div>
+                    <div>Retained: {retainedId ? DEFAULT_PLAYERS.find(p => p.id === retainedId)?.name : 'None'}</div>
+                  </div>
+                  <Button type="button" onClick={handleAddTeam} disabled={!currentTeamName.trim() || !currentTeamHomeGround.trim() || captainId === null || retainedId === null} className="w-full">
+                    Add Team
+                  </Button>
+                </div>
+              </div>
+              <p className="text-sm text-muted-foreground text-center">After adding all teams, start the auction from the dashboard.</p>
             </div>
-          </div>
+          )}
 
           {teams.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -451,14 +580,24 @@ export default function TournamentCreationForm({ onTournamentCreated, onCancel }
                     </div>
                   </div>
                   <div className="space-y-1">
-                    <p className="text-sm text-muted-foreground">Players: {team.players.length}</p>
-                    <div className="flex flex-wrap gap-1">
-                      {team.players.slice(0, 5).map(playerId => {
-                        const player = DEFAULT_PLAYERS.find(p => p.id === playerId);
-                        return (<Badge key={playerId} variant="secondary" className="text-xs">{player?.name}</Badge>);
-                      })}
-                      {team.players.length > 5 && (<Badge variant="outline" className="text-xs">+{team.players.length - 5} more</Badge>)}
-                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Players: {team.players.length}
+                      {useAuction && <span className="text-blue-600"> (Auction Mode)</span>}
+                    </p>
+                    {!useAuction ? (
+                      <div className="flex flex-wrap gap-1">
+                        {team.players.slice(0, 5).map(playerId => {
+                          const player = DEFAULT_PLAYERS.find(p => p.id === playerId);
+                          return (<Badge key={playerId} variant="secondary" className="text-xs">{player?.name}</Badge>);
+                        })}
+                        {team.players.length > 5 && (<Badge variant="outline" className="text-xs">+{team.players.length - 5} more</Badge>)}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-muted-foreground space-y-1">
+                        <div>Captain: {team.captainId ? DEFAULT_PLAYERS.find(p => p.id === team.captainId)?.name : 'None'}</div>
+                        <div>Retained: {(team.retainedPlayerIds || []).map(id => DEFAULT_PLAYERS.find(p => p.id === id)?.name).filter(Boolean).join(', ') || 'None'}</div>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}

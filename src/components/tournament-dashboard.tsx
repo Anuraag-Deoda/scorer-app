@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Trophy, Users, Calendar, Target, TrendingUp, Award, Play, CheckCircle, Clock, XCircle, BarChart, Zap, CloudRain, Cloud, Sun } from 'lucide-react';
+import { Trophy, Users, Calendar, Target, TrendingUp, Award, Play, CheckCircle, Clock, XCircle, BarChart, Zap, CloudRain, Cloud, Sun, Gavel } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { createMatch } from '@/lib/cricket-logic';
 import { DEFAULT_PLAYERS } from '@/data/default-players';
@@ -18,6 +18,7 @@ import NewMatchForm from './new-match-form';
 import ScoringInterface from './scoring-interface';
 import MatchScorecardDialog from './match-scorecard-dialog';
 import PlayerDataDisplay from './player-data-display';
+import TournamentAuction from './tournament-auction';
 import { updatePlayerHistoriesFromMatch } from '@/lib/player-stats-store';
 import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
@@ -1714,6 +1715,49 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
         </div>
       </div>
 
+      {/* Auction Mode Check */}
+      {tournament.status === 'auction' && (
+        <Card className="border-2 border-orange-200 bg-orange-50 dark:border-orange-700 dark:bg-orange-900/20">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-orange-800 dark:text-orange-200">
+              <Gavel className="w-6 h-6" />
+              Auction Mode Active
+            </CardTitle>
+            <CardDescription className="text-orange-700 dark:text-orange-300">
+              This tournament is currently in auction mode. Teams need to bid on players before matches can begin.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-4">
+              <Button 
+                onClick={() => setActiveTab('auction')} 
+                className="bg-orange-600 hover:bg-orange-700"
+              >
+                <Gavel className="w-4 h-4 mr-2" />
+                Go to Auction
+              </Button>
+              <Button 
+                variant="outline"
+                onClick={() => {
+                  // Convert auction teams to regular tournament teams
+                  const updatedTournament = {
+                    ...tournament,
+                    status: 'draft' as const,
+                    teams: tournament.teams.map(team => ({
+                      ...team,
+                      players: team.players.length === 0 ? [] : team.players, // Keep empty for now
+                    })),
+                  };
+                  onTournamentUpdate(updatedTournament);
+                }}
+              >
+                Skip Auction (Use Default Players)
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-4">
@@ -1756,7 +1800,11 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
               <Trophy className="w-5 h-5 text-yellow-500" />
               <div>
                 <p className="text-sm text-muted-foreground">Status</p>
-                <Badge variant={tournament.status === 'active' ? 'default' : 'secondary'}>
+                <Badge variant={
+                  tournament.status === 'active' ? 'default' : 
+                  tournament.status === 'auction' ? 'destructive' : 
+                  'secondary'
+                }>
                   {tournament.status}
                 </Badge>
               </div>
@@ -1766,13 +1814,16 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="points-table">Points Table</TabsTrigger>
           <TabsTrigger value="matches">Matches</TabsTrigger>
           <TabsTrigger value="statistics">Statistics</TabsTrigger>
           <TabsTrigger value="awards">Awards</TabsTrigger>
           <TabsTrigger value="history">History</TabsTrigger>
+          {tournament.status === 'auction' && (
+            <TabsTrigger value="auction">Auction</TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
@@ -3245,6 +3296,61 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
             </CardContent>
           </Card>
         </TabsContent>
+        
+        {/* Auction Tab */}
+        {tournament.status === 'auction' && (
+          <TabsContent value="auction">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Gavel className="w-6 h-6 text-orange-500" />
+                  Player Auction
+                </CardTitle>
+                <CardDescription>
+                  Bid on players to build your tournament teams. Each team starts with ₹100 purse and needs 13 players.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <TournamentAuction
+                  teams={tournament.teams.map(team => ({
+                    id: team.id,
+                    name: team.name,
+                    logo: team.logo,
+                    purse: 150, // Starting purse for each team
+                    initialPurse: 150,
+                    players: team.players,
+                    maxPlayers: 15,
+                    minPlayers: 13,
+                    // carry over pre-retentions from tournament for exclusion in auction
+                    captainId: team.captainId,
+                    retainedPlayerIds: team.retainedPlayerIds,
+                  }))}
+                  onAuctionComplete={(updatedTeams) => {
+                    // Update tournament with auction results
+                    const updatedTournament = {
+                      ...tournament,
+                      status: 'draft' as const,
+                      teams: tournament.teams.map(team => {
+                        const auctionTeam = updatedTeams.find(at => at.id === team.id);
+                        return {
+                          ...team,
+                          players: auctionTeam ? auctionTeam.players : team.players,
+                        };
+                      }),
+                    };
+                    onTournamentUpdate(updatedTournament);
+                    toast({
+                      title: "Auction Complete!",
+                      description: "Teams have been built through the auction system.",
+                    });
+                  }}
+                  onBack={() => setActiveTab('overview')}
+                  tournamentPlayerStats={playerStats}
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
       </Tabs>
       {showPlayerData && (
         <PlayerDataDisplay players={playerStats} onClose={() => setShowPlayerData(false)} />

@@ -274,6 +274,9 @@ export interface TournamentTeam {
   logo?: string; // Team logo URL (SVG or PNG)
   homeGround?: string;
   players: number[]; // Array of player IDs
+  // Auction-related selections
+  captainId?: number; // Optional captain retained before auction
+  retainedPlayerIds?: number[]; // Optional list of other retained players (besides captain)
   points: number;
   matchesPlayed: number;
   matchesWon: number;
@@ -339,7 +342,7 @@ export interface Tournament {
   numberOfTeams: number;
   teams: TournamentTeam[];
   matches: TournamentMatch[];
-  status: 'draft' | 'active' | 'completed';
+  status: 'draft' | 'active' | 'completed' | 'auction';
   startDate?: Date;
   endDate?: Date;
   createdDate: Date;
@@ -352,4 +355,5 @@ export interface Tournament {
     topTeamsAdvance: number; // How many teams advance to finals
   };
   awards?: TournamentAwards;
+  useAuction?: boolean; // Flag to indicate if tournament uses auction system
 }

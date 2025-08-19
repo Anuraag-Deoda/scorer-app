@@ -340,16 +340,12 @@ function updateStats(match: Match, ball: BallDetails): Match {
             
             const playingXI = battingTeam.players.filter((p: Player) => !p.isSubstitute || p.isImpactPlayer);
             if (currentInnings.wickets < playingXI.length - 1) {
-                let nextBatsman = battingTeam.players.find((p: Player) => p.batting.status === 'not out' && p.id !== currentInnings.batsmanNonStrike && (!p.isSubstitute || p.isImpactPlayer));
-               
-                if(nextBatsman) {
-                    currentInnings.batsmanOnStrike = nextBatsman.id
-                } else {
-                    currentInnings.batsmanOnStrike = -1;
-                }
-
+                // Don't automatically select next batsman - let user choose
+                currentInnings.batsmanOnStrike = -1; // Indicates need for manual selection
+                
+                // Keep the current partnership but mark it as needing a new batsman
                 currentInnings.currentPartnership = {
-                     batsman1: currentInnings.batsmanOnStrike, 
+                     batsman1: -1, // Will be set when next batsman is selected
                      batsman2: currentInnings.batsmanNonStrike, 
                      runs: 0,
                      balls: 0 
@@ -560,7 +556,7 @@ export function undoLastBall(match: Match): Match | null {
         currentInnings.currentPartnership.runs -= lastBall.runs;
     }
 
-    // Revert wicket
+    // Revert wicket - this is the most complex part
     if (lastBall.isWicket) {
         currentInnings.wickets--;
         if (onStrike) {
@@ -570,15 +566,57 @@ export function undoLastBall(match: Match): Match | null {
         if (bowler && lastBall.wicketType !== 'Run Out') {
             bowler.bowling.wickets--;
         }
-        currentInnings.fallOfWickets.pop();
         
-        // Restore previous partnership
-        const fow = currentInnings.fallOfWickets;
-        if (fow.length > 0) {
-            const lastFow = fow[fow.length - 1];
-            // This is a simplification; a full history would be needed to restore perfectly
-        } else {
-            // This was the first wicket, restore initial partnership
+        // Remove the last fall of wicket
+        const removedFow = currentInnings.fallOfWickets.pop();
+        
+        // Restore the previous partnership state
+        if (removedFow) {
+            // Find the previous partnership before this wicket
+            const previousBalls = currentInnings.timeline;
+            let previousPartnership = { batsman1: -1, batsman2: -1, runs: 0, balls: 0 };
+            
+            // Work backwards to find the last valid partnership
+            for (let i = previousBalls.length - 1; i >= 0; i--) {
+                const ball = previousBalls[i];
+                if (ball.isWicket) {
+                    // Found the previous wicket, now find the partnership after it
+                    const afterWicketBalls = previousBalls.slice(i + 1);
+                    let partnershipRuns = 0;
+                    let partnershipBalls = 0;
+                    
+                    for (const partnershipBall of afterWicketBalls) {
+                        if (partnershipBall.event !== 'wd' && partnershipBall.event !== 'nb') {
+                            partnershipBalls++;
+                        }
+                        if (partnershipBall.event === 'run') {
+                            partnershipRuns += partnershipBall.runs;
+                        }
+                    }
+                    
+                    // Find the batsmen who were in that partnership
+                    const previousBatsman1 = battingTeam.players.find((p: Player) => 
+                        p.batting.status === 'not out' && 
+                        p.id !== currentInnings.batsmanNonStrike && 
+                        (!p.isSubstitute || p.isImpactPlayer)
+                    );
+                    
+                    if (previousBatsman1) {
+                        previousPartnership = {
+                            batsman1: previousBatsman1.id,
+                            batsman2: currentInnings.batsmanNonStrike,
+                            runs: partnershipRuns,
+                            balls: partnershipBalls
+                        };
+                    }
+                    break;
+                }
+            }
+            
+            currentInnings.currentPartnership = previousPartnership;
+            
+            // Restore the batsman on strike to the one who was out
+            currentInnings.batsmanOnStrike = lastBall.batsmanId;
         }
     }
 
@@ -592,14 +630,25 @@ export function undoLastBall(match: Match): Match | null {
         }
     }
 
-    // Revert strike rotation
+    // Revert strike rotation - this needs to be done carefully
     if (lastBall.runs % 2 === 1 && isLegalBall) {
         [currentInnings.batsmanOnStrike, currentInnings.batsmanNonStrike] = [currentInnings.batsmanNonStrike, currentInnings.batsmanOnStrike];
     }
-    if (currentInnings.ballsThisOver === 5 && isLegalBall) { // End of over strike change
+    
+    // Revert end of over strike change
+    if (currentInnings.ballsThisOver === 5 && isLegalBall) {
         [currentInnings.batsmanOnStrike, currentInnings.batsmanNonStrike] = [currentInnings.batsmanNonStrike, currentInnings.batsmanOnStrike];
+        // We have effectively moved from a new over back into the previous over.
+        // Restore the previous bowler for that over.
+        if (lastBall.bowlerId !== undefined && lastBall.bowlerId !== null) {
+            currentInnings.currentBowler = lastBall.bowlerId;
+        }
     }
 
+    // Fallback: if bowler got cleared elsewhere, restore from the undone ball
+    if (currentInnings.currentBowler === -1 && lastBall.bowlerId !== undefined && lastBall.bowlerId !== null) {
+        currentInnings.currentBowler = lastBall.bowlerId;
+    }
 
     // Recalculate rates
     battingTeam.players.forEach((p: Player) => {
@@ -800,4 +849,40 @@ export function handleRainInterruption(match: Match, currentOver: number, curren
   }
 
   return newMatch;
+}
+
+export function selectNextBatsman(match: Match, nextBatsmanId: number): Match | null {
+    const newMatch = JSON.parse(JSON.stringify(match));
+    const currentInnings = newMatch.innings[newMatch.currentInnings - 1];
+    
+    // Check if we're in a valid state to select next batsman
+    if (currentInnings.wickets === 0) {
+        return null; // No wicket has fallen yet
+    }
+    
+    const battingTeam = currentInnings.battingTeam;
+    const nextBatsman = battingTeam.players.find((p: Player) => p.id === nextBatsmanId);
+    
+    if (!nextBatsman) {
+        return null; // Player not found
+    }
+    
+    // Check if this player is available to bat
+    if (nextBatsman.batting.status !== 'not out' || 
+        (nextBatsman.isSubstitute && !nextBatsman.isImpactPlayer)) {
+        return null; // Player cannot bat
+    }
+    
+    // Set the next batsman on strike
+    currentInnings.batsmanOnStrike = nextBatsmanId;
+    
+    // Update the current partnership
+    currentInnings.currentPartnership = {
+        batsman1: nextBatsmanId,
+        batsman2: currentInnings.batsmanNonStrike,
+        runs: 0,
+        balls: 0
+    };
+    
+    return newMatch;
 }

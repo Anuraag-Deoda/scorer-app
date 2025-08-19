@@ -165,6 +165,8 @@ function ScoreboardContent({
                     .filter((p) => p.batting.status !== "did not bat")
                     .map((player: Player) => {
                       const isNotOut = player.batting.status === "not out";
+                      const hasBatted = player.batting.ballsFaced > 0;
+                      const isYetToBat = isNotOut && !hasBatted;
                       const isOnStrike =
                         player.id === currentInnings.batsmanOnStrike &&
                         isNotOut;
@@ -197,7 +199,7 @@ function ScoreboardContent({
                           <TableCell className="text-xs text-muted-foreground max-w-[120px] truncate py-1 px-2 sm:px-4">
                             {player.batting.status === "out"
                               ? player.batting.outDetails
-                              : player.batting.status}
+                              : isYetToBat ? "yet to bat" : player.batting.status}
                           </TableCell>
                           <TableCell className="text-right py-1 px-2 sm:px-4 font-medium">
                             {player.batting.runs}
