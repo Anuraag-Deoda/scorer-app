@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import type { Match, BallEvent, Team, BallDetails, GenerateMatchCommentaryInput, FielderPlacement } from "@/types"
-import { processBall, undoLastBall, updateFieldPlacements, getMatchSituation, getPowerplayOvers, handleRainInterruption, selectNextBatsman } from "@/lib/cricket-logic"
+import { createMatch, processBall, undoLastBall, updateFieldPlacements, getMatchSituation, getPowerplayOvers, handleRainInterruption, selectNextBatsman } from "@/lib/cricket-logic"
 import { generateMatchCommentary } from "@/ai/flows/generate-match-commentary";
 import { Button } from "../components/ui/button"
 import { BallOutcome } from "@/simulation/types";
@@ -15,7 +15,7 @@ import { Separator } from "./ui/separator"
 import CommentaryGenerator from "./commentary-generator"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
-import { Undo, Flame, PlusCircle, Users, Bot, ChevronsRight, Target } from "lucide-react"
+import { Undo, Flame, PlusCircle, Users, Bot, ChevronsRight, Target, RefreshCw } from "lucide-react"
 import ManagePlayersDialog from "./manage-players-dialog";
 import { Label } from "./ui/label";
 import { Slider } from "./ui/slider";
@@ -113,6 +113,17 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
         toast({ variant: "destructive", title: "Undo Failed", description: "No events to undo." });
     }
   }
+
+  const resetMatch = () => {
+    const newMatch = createMatch(match.teams as [Team, Team], {
+      teamNames: [match.teams[0].name, match.teams[1].name],
+      oversPerInnings: match.oversPerInnings,
+      toss: match.toss,
+      matchType: match.matchType,
+    });
+    setMatch(newMatch);
+    toast({ title: "Match Reset", description: "The match has been reset to its initial state." });
+  };
 
   const handleBowlerChange = (bowlerId: number) => {
     const newMatch = JSON.parse(JSON.stringify(match));
@@ -495,10 +506,11 @@ export default function ScoringInterface({ match, setMatch, endMatch }: ScoringI
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={endMatch}>End Match</AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                    <AlertDialogAction onClick={endMatch}>End Match</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+              <Button onClick={resetMatch} className="w-full" variant="outline" disabled={isSimulating}><RefreshCw className="mr-2"/> Reset Match</Button>
              </div>
                <div className="flex gap-3">
                   <Button onClick={() => setIsManagePlayersOpen(true)} className="w-full" variant="outline" disabled={isSimulating}><Users className="mr-2"/> Manage Players</Button>

@@ -55,7 +55,7 @@ function createInnings(battingTeam: Team, bowlingTeam: Team): Innings {
   };
 }
 
-export function createMatch(teams: Team[], settings: MatchSettings): Match {
+export function createMatch(teams: [Team, Team], settings: MatchSettings): Match {
   // Validate teams
   if (teams.length !== 2) {
     throw new Error('Match must have exactly 2 teams');
@@ -366,8 +366,10 @@ function updateStats(match: Match, ball: BallDetails): Match {
         currentInnings.overs++;
         currentInnings.ballsThisOver = 0;
         
-        // Change strike
-        [currentInnings.batsmanOnStrike, currentInnings.batsmanNonStrike] = [currentInnings.batsmanNonStrike, currentInnings.batsmanOnStrike];
+        // Change strike only if a wicket hasn't just fallen
+        if (currentInnings.batsmanOnStrike !== -1) {
+            [currentInnings.batsmanOnStrike, currentInnings.batsmanNonStrike] = [currentInnings.batsmanNonStrike, currentInnings.batsmanOnStrike];
+        }
         
         // Check for maiden
         const overTimeline = currentInnings.timeline.slice(currentInnings.timeline.length - 5);
@@ -779,7 +781,7 @@ export function handleRainInterruption(match: Match, currentOver: number, curren
   }
 
   const newMatch = JSON.parse(JSON.stringify(match));
-  const { interruptionOver, interruptionInnings, originalOvers } = match.rainSimulation;
+  const { interruptionOver, interruptionInnings, originalOvers } = match.rainSimulation!;
 
   // Check if rain should occur now
   if (currentInnings === interruptionInnings && currentOver >= interruptionOver) {

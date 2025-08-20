@@ -491,10 +491,10 @@ export default function TournamentDashboard({ tournament, onTournamentUpdate, on
               
               onTournamentUpdate(updatedTournament);
               
-              toast({
-                title: "Match Data Recovered",
-                description: `Recovered data for match ${match.matchNumber}`,
-              });
+              // toast({
+              //   title: "Match Data Recovered",
+              //   description: `Recovered data for match ${match.matchNumber}`,
+              // });
             }
           } catch (error) {
             console.error('Error recovering match from backup:', error);

@@ -95,9 +95,13 @@ function ScoreboardContent({
   const isMobile = useIsMobile();
 
   const BattingCard = ({ innings }: { innings: Innings }) => {
-    const playingXI = innings.battingTeam.players.filter(
-      (p: Player) => !p.isSubstitute || p.isImpactPlayer
-    );
+    const playingXI = innings.battingTeam.players
+      .filter((p: Player) => !p.isSubstitute || p.isImpactPlayer)
+      .sort((a, b) => {
+        if (a.batting.status === 'not out' && b.batting.status !== 'not out') return -1;
+        if (a.batting.status !== 'not out' && b.batting.status === 'not out') return 1;
+        return 0;
+      });
     const didNotBat = innings.battingTeam.players.filter(
       (p: Player) => p.batting.status === "did not bat" && !p.isSubstitute
     );

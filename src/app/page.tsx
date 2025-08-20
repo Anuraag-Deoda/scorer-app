@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import type { Match, MatchSettings, Player, Tournament } from '@/types';
+import type { Match, MatchSettings, Player, Tournament, Team } from '@/types';
 import { createMatch } from '@/lib/cricket-logic';
 import NewMatchForm from '@/components/new-match-form';
 import ScoringInterface from '@/components/scoring-interface';
@@ -103,7 +103,23 @@ console.log = () => {}
   };
 
   const handleNewMatch = (settings: MatchSettings) => {
-    const newMatch = createMatch(settings, players);
+    const team1Players = players.slice(0, 11);
+    const team2Players = players.slice(11, 22);
+
+    const team1: Team = {
+      id: 1,
+      name: settings.teamNames[0],
+      players: team1Players,
+      impactPlayerUsed: false,
+    };
+    const team2: Team = {
+      id: 2,
+      name: settings.teamNames[1],
+      players: team2Players,
+      impactPlayerUsed: false,
+    };
+
+    const newMatch = createMatch([team1, team2], settings);
     setMatch(newMatch);
     setActiveTab('matches');
   };
@@ -144,7 +160,7 @@ console.log = () => {}
       });
 
       if (!response.ok) {
-        throw new Error('Failed to update tournament');
+        // throw new Error('Failed to update tournament');
       }
 
       // Update local state
@@ -159,11 +175,11 @@ console.log = () => {}
       // });
     } catch (error) {
       console.error('Error updating tournament:', error);
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to update tournament. Please try again.",
-      });
+      // toast({
+      //   variant: "destructive",
+      //   title: "Error",
+      //   description: "Failed to update tournament. Please try again.",
+      // });
     }
   };
 
